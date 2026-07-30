@@ -1,8 +1,0 @@
----
-bool result
-string error_message
-float32[] M
-float32[] C
-float32[] G
-float32[] B_J_O
-float32[] B_J_EE

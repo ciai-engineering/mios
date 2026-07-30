@@ -317,3 +317,46 @@ def update_object(robot, name, content={}):
 
 
    
+def teach_insertion(robot:str, object_name:str):
+    insertable = object_name
+    
+    print("\nteaching ",insertable, "for ", robot,"\n")
+
+    handguiding(robot, "Insert the object into the robot\'s fingers. [Press any key to continue]")
+    call_method(robot, 12000, "grasp", {"width":0,"speed":1,"force":100})
+    call_method(robot, 12000, "teach_object", {"object": insertable, "width":True})
+    current_finger_width = call_method(robot,12000,"get_state")["result"]["gripper_width"]
+    call_method(robot,12000,"move_gripper",{"speed":1,"force":100,"width":current_finger_width+0.005})
+    time.sleep(0.2)
+    print(call_method(robot, 12000, "grasp_object", {"object": insertable}))
+    handguiding(robot, "Teach approach pose slightly above the object\'s container. [Press any key to continue]")
+    call_method(robot, 12000, "teach_object", {"object": insertable+"_container_approach"})
+    handguiding(robot, "Teach container pose with the object fully inserted into the container. [Press any key to continue]")
+    call_method(robot, 12000, "teach_object", {"object": insertable+"_container"})
+    # print(call_method(robot, 12000, "grasp_object", {"object": insertable}))
+    handguiding(robot, "Extract robot and object again. [Press any key to continue]")
+
+def handguiding(robot:str, message:str="Press any key to stop"):
+    context = {
+        "skill": {
+            "record_trajectory": False,
+            #"recording_length": 1,
+            #"recording_name": None,
+            
+        },
+        "control": {
+            "control_mode": 0
+        }
+    }
+    t = Task(robot)
+    t.add_skill("record_trajectory", "HandGuiding", context)
+    t.start()
+    input(message)
+    result = t.stop()
+    print("Result: " + str(result))
+
+
+if __name__ == "__main__":
+#    handguiding("127.0.0.1")
+    robot = "miosr.nuc3"
+    teach_insertion(robot, "samuelnew")

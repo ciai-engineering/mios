@@ -104,3 +104,9 @@ def stop_services(robots:list = ["localhost"]):
         except Exception as e:
             print("Error with robot ",r)
             print(e)
+
+
+if __name__ == "__main__":
+    robot = "miosl.nuc3"
+    example_learning(robot, "samuelnew")
+    # stop_services([robot])
