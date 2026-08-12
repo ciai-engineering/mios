@@ -1,0 +1,252 @@
+#!/usr/bin/env python3
+"""Command-line access to the official franka_ros2 actions and MIOS controllers."""
+
+import argparse
+import json
+import math
+import sys
+import time
+
+import rclpy
+from action_msgs.msg import GoalStatus
+from franka_msgs.action import ErrorRecovery, Grasp, Homing, Move, PTPMotion
+from franka_msgs.msg import FrankaRobotState
+from geometry_msgs.msg import PoseStamped, TwistStamped
+from rclpy.action import ActionClient
+from rclpy.node import Node
+
+
+def ros_name(namespace, name):
+    pieces = [piece.strip("/") for piece in (namespace, name) if piece.strip("/")]
+    return "/" + "/".join(pieces)
+
+
+class FrankaClient(Node):
+    def __init__(self, args):
+        super().__init__("mios_franka_client")
+        self.args = args
+
+    def run_action(self, action_type, name, goal, timeout=None):
+        action_name = ros_name(self.args.namespace, name)
+        client = ActionClient(self, action_type, action_name)
+        wait = self.args.timeout if timeout is None else timeout
+        if not client.wait_for_server(timeout_sec=wait):
+            raise RuntimeError(f"action server {action_name!r} is unavailable")
+        goal_future = client.send_goal_async(goal)
+        rclpy.spin_until_future_complete(self, goal_future, timeout_sec=wait)
+        handle = goal_future.result()
+        if handle is None or not handle.accepted:
+            raise RuntimeError("goal was rejected")
+        result_future = handle.get_result_async()
+        rclpy.spin_until_future_complete(self, result_future, timeout_sec=wait)
+        response = result_future.result()
+        if response is None:
+            handle.cancel_goal_async()
+            raise TimeoutError(f"action did not complete within {wait:g} seconds")
+        if response.status != GoalStatus.STATUS_SUCCEEDED:
+            raise RuntimeError(f"action finished with status {response.status}")
+        return response.result
+
+    def joint(self):
+        goal = PTPMotion.Goal()
+        goal.goal_joint_configuration = list(self.args.positions)
+        goal.maximum_joint_velocities = [self.args.max_velocity] * 7
+        goal.goal_tolerance = self.args.tolerance
+        result = self.run_action(PTPMotion, self.args.ptp_action, goal)
+        if result.error_message:
+            raise RuntimeError(result.error_message)
+        return {"target_status": int(result.target_status.status)}
+
+    def gripper_move(self):
+        goal = Move.Goal()
+        goal.width = self.args.width
+        goal.speed = self.args.speed
+        result = self.run_action(Move, self.args.gripper_move_action, goal)
+        if not result.success:
+            raise RuntimeError(result.error)
+        return {"success": True}
+
+    def grasp(self):
+        goal = Grasp.Goal()
+        goal.width = self.args.width
+        goal.speed = self.args.speed
+        goal.force = self.args.force
+        goal.epsilon.inner = self.args.epsilon_inner
+        goal.epsilon.outer = self.args.epsilon_outer
+        result = self.run_action(Grasp, self.args.gripper_grasp_action, goal)
+        if not result.success:
+            raise RuntimeError(result.error)
+        return {"success": True}
+
+    def home(self):
+        result = self.run_action(Homing, self.args.gripper_homing_action, Homing.Goal())
+        if not result.success:
+            raise RuntimeError(result.error)
+        return {"success": True}
+
+    def recover(self):
+        self.run_action(ErrorRecovery, self.args.recovery_action, ErrorRecovery.Goal())
+        return {"success": True}
+
+    def state(self):
+        received = []
+
+        def callback(message):
+            received.append(message)
+
+        subscription = self.create_subscription(
+            FrankaRobotState,
+            ros_name(self.args.namespace, self.args.state_topic),
+            callback,
+            10,
+        )
+        deadline = time.monotonic() + self.args.timeout
+        while rclpy.ok() and not received and time.monotonic() < deadline:
+            rclpy.spin_once(self, timeout_sec=0.1)
+        self.destroy_subscription(subscription)
+        if not received:
+            raise TimeoutError("no Franka robot state received")
+        state = received[0]
+        return {
+            "stamp": {"sec": state.header.stamp.sec, "nanosec": state.header.stamp.nanosec},
+            "q": list(state.measured_joint_state.position),
+            "dq": list(state.measured_joint_state.velocity),
+            "tau_j": list(state.measured_joint_state.effort),
+            "tau_ext": list(state.tau_ext_hat_filtered.effort),
+            "pose": {
+                "position": [state.o_t_ee.pose.position.x, state.o_t_ee.pose.position.y,
+                             state.o_t_ee.pose.position.z],
+                "orientation_xyzw": [state.o_t_ee.pose.orientation.x,
+                                     state.o_t_ee.pose.orientation.y,
+                                     state.o_t_ee.pose.orientation.z,
+                                     state.o_t_ee.pose.orientation.w],
+            },
+            "robot_mode": int(state.robot_mode),
+            "control_command_success_rate": state.control_command_success_rate,
+        }
+
+    def pose(self):
+        quaternion_norm = math.sqrt(sum(value * value for value in self.args.quaternion))
+        if not all(math.isfinite(value) for value in self.args.position + self.args.quaternion):
+            raise ValueError("pose values must be finite")
+        if not math.isfinite(quaternion_norm) or quaternion_norm < 1e-9:
+            raise ValueError("quaternion must be non-zero")
+        publisher = self.create_publisher(
+            PoseStamped,
+            ros_name(self.args.namespace, self.args.pose_topic),
+            10,
+        )
+        message = PoseStamped()
+        message.header.frame_id = self.args.frame
+        message.pose.position.x, message.pose.position.y, message.pose.position.z = self.args.position
+        qx, qy, qz, qw = (value / quaternion_norm for value in self.args.quaternion)
+        message.pose.orientation.x = qx
+        message.pose.orientation.y = qy
+        message.pose.orientation.z = qz
+        message.pose.orientation.w = qw
+        self._publish_for_discovery(publisher, message, 0.25, 20.0)
+        return {"accepted_for_delivery": True}
+
+    def twist(self):
+        publisher = self.create_publisher(
+            TwistStamped,
+            ros_name(self.args.namespace, self.args.twist_topic),
+            10,
+        )
+        message = TwistStamped()
+        message.header.frame_id = self.args.frame
+        message.twist.linear.x, message.twist.linear.y, message.twist.linear.z = self.args.linear
+        message.twist.angular.x, message.twist.angular.y, message.twist.angular.z = self.args.angular
+        self._publish_for_discovery(publisher, message, self.args.duration, self.args.rate)
+        message.twist.linear.x = message.twist.linear.y = message.twist.linear.z = 0.0
+        message.twist.angular.x = message.twist.angular.y = message.twist.angular.z = 0.0
+        self._publish_for_discovery(publisher, message, 0.15, self.args.rate)
+        return {"completed": True}
+
+    def _publish_for_discovery(self, publisher, message, duration, rate):
+        period = 1.0 / rate
+        deadline = time.monotonic() + duration
+        while rclpy.ok() and time.monotonic() < deadline:
+            message.header.stamp = self.get_clock().now().to_msg()
+            publisher.publish(message)
+            rclpy.spin_once(self, timeout_sec=0.0)
+            time.sleep(period)
+
+
+def parser():
+    result = argparse.ArgumentParser(description=__doc__)
+    result.add_argument("--namespace", default="")
+    result.add_argument("--timeout", type=float, default=30.0)
+    result.add_argument("--ptp-action", default="action_server/ptp_motion")
+    result.add_argument("--recovery-action", default="action_server/error_recovery")
+    result.add_argument("--state-topic", default="franka_robot_state_broadcaster/robot_state")
+    result.add_argument("--gripper-move-action", default="franka_gripper/move")
+    result.add_argument("--gripper-grasp-action", default="franka_gripper/grasp")
+    result.add_argument("--gripper-homing-action", default="franka_gripper/homing")
+    result.add_argument("--pose-topic", default="mios_cartesian_pose_controller/target_pose")
+    result.add_argument("--twist-topic", default="mios_cartesian_velocity_controller/target_twist")
+    commands = result.add_subparsers(dest="command", required=True)
+
+    commands.add_parser("state")
+    joint = commands.add_parser("joint")
+    joint.add_argument("positions", type=float, nargs=7, metavar="Q")
+    joint.add_argument("--max-velocity", type=float, default=0.2)
+    joint.add_argument("--tolerance", type=float, default=0.005)
+
+    pose = commands.add_parser("pose")
+    pose.add_argument("position", type=float, nargs=3, metavar="XYZ")
+    pose.add_argument("quaternion", type=float, nargs=4, metavar="XYZW")
+    pose.add_argument("--frame", default="fr3_link0")
+
+    twist = commands.add_parser("twist")
+    twist.add_argument("linear", type=float, nargs=3, metavar="XYZ")
+    twist.add_argument("angular", type=float, nargs=3, metavar="XYZ")
+    twist.add_argument("--frame", default="fr3_link0")
+    twist.add_argument("--duration", type=float, default=1.0)
+    twist.add_argument("--rate", type=float, default=100.0)
+
+    move = commands.add_parser("gripper-move")
+    move.add_argument("width", type=float)
+    move.add_argument("--speed", type=float, default=0.05)
+    grasp = commands.add_parser("grasp")
+    grasp.add_argument("width", type=float)
+    grasp.add_argument("--speed", type=float, default=0.03)
+    grasp.add_argument("--force", type=float, default=50.0)
+    grasp.add_argument("--epsilon-inner", type=float, default=0.005)
+    grasp.add_argument("--epsilon-outer", type=float, default=0.005)
+    commands.add_parser("home")
+    commands.add_parser("recover")
+    return result
+
+
+def main():
+    args = parser().parse_args()
+    if args.timeout <= 0.0:
+        raise ValueError("--timeout must be positive")
+    if args.command == "twist" and (args.duration <= 0.0 or args.rate <= 0.0):
+        raise ValueError("twist duration and rate must be positive")
+    if args.command == "twist" and not all(
+        math.isfinite(value) for value in args.linear + args.angular
+    ):
+        raise ValueError("twist values must be finite")
+    if args.command == "joint" and (args.max_velocity <= 0.0 or args.tolerance <= 0.0):
+        raise ValueError("joint velocity and tolerance must be positive")
+    if args.command in {"gripper-move", "grasp"} and args.speed <= 0.0:
+        raise ValueError("gripper speed must be positive")
+    if args.command == "grasp" and args.force <= 0.0:
+        raise ValueError("grasp force must be positive")
+    rclpy.init()
+    node = FrankaClient(args)
+    try:
+        output = getattr(node, args.command.replace("-", "_"))()
+        print(json.dumps(output))
+    except Exception as error:  # concise CLI error; ROS logs retain transport details
+        print(json.dumps({"error": str(error)}), file=sys.stderr)
+        sys.exit(1)
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == "__main__":
+    main()

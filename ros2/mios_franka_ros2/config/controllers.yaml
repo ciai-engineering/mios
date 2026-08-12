@@ -1,0 +1,41 @@
+/**:
+  controller_manager:
+    ros__parameters:
+      update_rate: 1000
+      thread_priority: 98
+
+      joint_state_broadcaster:
+        type: joint_state_broadcaster/JointStateBroadcaster
+
+      franka_robot_state_broadcaster:
+        type: franka_robot_state_broadcaster/FrankaRobotStateBroadcaster
+        state_interfaces:
+          robot_state
+
+      mios_cartesian_pose_controller:
+        type: mios_franka_ros2/CartesianPoseController
+
+      mios_cartesian_velocity_controller:
+        type: mios_franka_ros2/CartesianVelocityController
+
+/**:
+  franka_robot_state_broadcaster:
+    ros__parameters:
+      convenience_publish_rate: 1000
+
+/**:
+  mios_cartesian_pose_controller:
+    ros__parameters:
+      arm_prefix: ""
+      base_frame: fr3_link0
+      max_linear_velocity: 0.10
+      max_angular_velocity: 0.50
+
+/**:
+  mios_cartesian_velocity_controller:
+    ros__parameters:
+      arm_prefix: ""
+      base_frame: fr3_link0
+      command_timeout: 0.10
+      max_linear_velocity: 0.10
+      max_angular_velocity: 0.50

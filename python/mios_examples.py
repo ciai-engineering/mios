@@ -357,6 +357,5 @@ def handguiding(robot:str, message:str="Press any key to stop"):
 
 
 if __name__ == "__main__":
-#    handguiding("127.0.0.1")
     robot = "miosr.nuc3"
     teach_insertion(robot, "samuelnew")

@@ -1,5 +1,10 @@
 # MIOS Python Tools
 
+The experimental ROS 2 control backend for Franka robots is documented in
+[`ros2/mios_franka_ros2/README.md`](ros2/mios_franka_ros2/README.md). It uses
+the official `franka_ros2` hardware interface; it does not open a second
+`libfranka` connection.
+
 ## Requirements
 
 - Python 3.11 or newer

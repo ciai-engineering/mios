@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<library path="mios_franka_controllers">
+  <class
+    name="mios_franka_ros2/CartesianPoseController"
+    type="mios_franka_ros2::CartesianPoseController"
+    base_class_type="controller_interface::ControllerInterface">
+    <description>Rate-limited Cartesian pose commands for franka_ros2.</description>
+  </class>
+  <class
+    name="mios_franka_ros2/CartesianVelocityController"
+    type="mios_franka_ros2::CartesianVelocityController"
+    base_class_type="controller_interface::ControllerInterface">
+    <description>Watchdog-protected Cartesian velocity commands for franka_ros2.</description>
+  </class>
+</library>
