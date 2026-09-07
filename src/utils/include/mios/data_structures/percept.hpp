@@ -1,12 +1,11 @@
 #pragma once
 
-#include "franka/robot_state.h"
-#include "franka/gripper_state.h"
-#include "franka/model.h"
+#include "mios/control/control_types.hpp"
 #include "Eigen/Core"
 
 #include <chrono>
 #include <memory>
+#include <optional>
 
 namespace mios {
 
@@ -15,7 +14,10 @@ enum HandActivityState{hsIdle,hsBusy,hsFinished};
 class Percept{
 public:
     Percept();
-    void update(std::unique_ptr<franka::Model> const& model, const franka::RobotState& robot_state, const franka::GripperState &gripper_state, std::optional<Eigen::Matrix<double,3,3> > O_R_T);
+    // Robot state/model have already been converted at the transport boundary.
+    void update(const control::RobotState& robot_state, const control::RobotModel& model,
+                const control::GripperState& gripper_state,
+                std::optional<Eigen::Matrix<double,3,3>> O_R_T);
     void update_controller();
 
     struct Proprioception{
@@ -169,7 +171,7 @@ public:
         Eigen::Matrix<double,7,1> dq_d;
         Eigen::Matrix<double,7,1> tau_ff;
     }controller;
-    franka::RobotMode robot_mode;
+    control::RobotMode robot_mode{control::RobotMode::kOther};
     std::chrono::high_resolution_clock::time_point time;
 };
 

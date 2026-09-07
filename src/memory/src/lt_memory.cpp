@@ -9,7 +9,8 @@
 namespace mios {
 
 LTMemory::LTMemory(const MiosContext &context):
-    m_mongodb_client(context.config.database_name, context.config.database_port),
+    m_mongodb_client(context.config.database_name, context.config.database_port,
+                     !context.config.defer_database_connection),
     m_context(context){
         spdlog::trace("LTMemory::LTMemory");
 
@@ -36,6 +37,10 @@ void LTMemory::link_to_skill_library(SkillLibrary *skill_library){
 
 bool LTMemory::initialize(){
     spdlog::trace("LTMemory::initialize");
+    if(!m_mongodb_client.connect()){
+        spdlog::error("Could not connect to the database.");
+        return false;
+    }
     if(!make_database_consistent()){
         return false;
     }
@@ -104,7 +109,10 @@ bool LTMemory::make_database_consistent(){
     if(!m_mongodb_client.make_document_consistent("user","parameters",default_values)){
         return false;
     }
-    //    if(!make_default_tasks_consistent()){
+    if(!make_ros2_no_motion_self_test_consistent()){
+        return false;
+    }
+//    if(!make_default_tasks_consistent()){
     //        return false;
     //    }
     if(!make_default_environment_consistent()){
@@ -115,6 +123,18 @@ bool LTMemory::make_database_consistent(){
         return false;
     }
     return true;
+}
+
+bool LTMemory::make_ros2_no_motion_self_test_consistent(){
+    spdlog::trace("LTMemory::make_ros2_no_motion_self_test_consistent");
+    nlohmann::json default_values;
+    default_values["name"]="Ros2NoMotionSelfTest";
+    default_values["description"]=
+        "ROS 2 migration scheduler self-test. It never commands the arm, gripper, or robot parameters.";
+    default_values["parameters"]=nlohmann::json::object();
+    default_values["skills"]=nlohmann::json::object();
+    return m_mongodb_client.make_document_consistent(
+        "Ros2NoMotionSelfTest", "tasks", default_values);
 }
 
 bool LTMemory::make_default_tasks_consistent(){

@@ -41,7 +41,6 @@ include(cmake/Conan.cmake)
 include(cmake/Doxygen.cmake)
 include(cmake/PreventInSourceBuilds.cmake)
 include(cmake/StaticAnalyzers.cmake)
-include(cmake/CopyUtils.cmake)
 
 option(ONLY_COVERAGE "Build only tests necessary for coverage" OFF)
 option(LIBCPP "Build with libc++" OFF)
@@ -59,6 +58,25 @@ option(DEBUG_LOGGING "Enabling debug logging" OFF)
 option(ENABLE_IPO "Enable Interprocedural Optimization, aka Link Time Optimization (LTO)" OFF)
 option(ENABLE_PCH "Enable Precompiled Headers" ON)
 option(ENABLE_UNITY_BUILD "Enable unity build" OFF)
+option(MIOS_BUILD_LEGACY_PANDA
+    "Build the legacy PandaBody/libfranka transport adapter" OFF)
+option(MIOS_BUILD_LEGACY_MAIN
+    "Build the legacy standalone MIOS executable" OFF)
+option(MIOS_USE_SYSTEM_LIBFRANKA
+    "Use an already installed libfranka package for the legacy Panda transport" OFF)
+option(MIOS_BUILD_ROS2_CORE_RUNTIME
+    "Build the ROS 2 executable that owns mios::Core" OFF)
+
+if(ENABLE_TESTING)
+    include(CTest)
+endif()
+
+# The legacy standalone executable ships shell/Python helpers and prebuilt
+# plugins. The ROS-owned Core executable does not use them, so keep these
+# file copies out of the ROS-only configuration path.
+if(MIOS_BUILD_LEGACY_MAIN)
+    include(cmake/CopyUtils.cmake)
+endif()
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_BINARY_DIR})
 list(APPEND CMAKE_PREFIX_PATH ${CMAKE_SOURCE_DIR}/src/plugins)

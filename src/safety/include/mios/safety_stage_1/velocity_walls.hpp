@@ -10,7 +10,7 @@ class VelocityWallsSafetyModule : public SafetyModuleStage1{
 public:
     VelocityWallsSafetyModule();
 
-    void initialize(const Percept &p_0, const Memory *memory) override;
+    void initialize(const Percept &p_0, const control::ControlRuntimeConfig& config) override;
     void step(const Percept &p, Actuator &cmd) override;
     void terminate() override;
 

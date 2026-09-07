@@ -1,5 +1,6 @@
 #include "mios/panda/panda_body.hpp"
 #include "mios/memory/memory.hpp"
+#include "mios/control/franka_adapter.hpp"
 #include "mirmi_cpp_utils/network/network.hpp"
 #include "mirmi_cpp_utils/conversion/conversion.hpp"
 #include "conv_vel2pose/conv_vel2pose_wrapper.hpp"
@@ -511,6 +512,63 @@ ControlReturnType PandaBody::control(std::function<franka::JointPositions (const
     }
 }
 
+ControlReturnType PandaBody::control(control::CommandMode mode, ControlCallback controller_callback) {
+    const auto period_seconds = [](const franka::Duration& duration) { return duration.toSec(); };
+    switch (mode) {
+        case control::CommandMode::kTorque:
+        {
+            std::function<franka::Torques(const franka::RobotState&, franka::Duration)> bridge =
+                [this, controller_callback, period_seconds](const franka::RobotState& state,
+                                                            franka::Duration duration) {
+                    const control::RobotModel model =
+                        m_panda_model ? control::from_franka_model(*m_panda_model, state)
+                                      : control::RobotModel{};
+                    const control::GripperState gripper_state =
+                        control::from_franka_state(m_gripper_state);
+                    return control::to_franka_torques(controller_callback(
+                        control::from_franka_state(state), model, gripper_state,
+                        period_seconds(duration)));
+                };
+            return control(std::move(bridge));
+        }
+        case control::CommandMode::kJointVelocity:
+        {
+            std::function<franka::JointVelocities(const franka::RobotState&, franka::Duration)>
+                bridge = [this, controller_callback, period_seconds](const franka::RobotState& state,
+                                                                      franka::Duration duration) {
+                    const control::RobotModel model =
+                        m_panda_model ? control::from_franka_model(*m_panda_model, state)
+                                      : control::RobotModel{};
+                    const control::GripperState gripper_state =
+                        control::from_franka_state(m_gripper_state);
+                    return control::to_franka_joint_velocities(controller_callback(
+                        control::from_franka_state(state), model, gripper_state,
+                        period_seconds(duration)));
+                };
+            return control(std::move(bridge));
+        }
+        case control::CommandMode::kCartesianVelocity:
+        {
+            std::function<franka::CartesianVelocities(const franka::RobotState&, franka::Duration)>
+                bridge = [this, controller_callback, period_seconds](const franka::RobotState& state,
+                                                                      franka::Duration duration) {
+                    const control::RobotModel model =
+                        m_panda_model ? control::from_franka_model(*m_panda_model, state)
+                                      : control::RobotModel{};
+                    const control::GripperState gripper_state =
+                        control::from_franka_state(m_gripper_state);
+                    return control::to_franka_cartesian_velocities(controller_callback(
+                        control::from_franka_state(state), model, gripper_state,
+                        period_seconds(duration)));
+                };
+            return control(std::move(bridge));
+        }
+        default:
+            spdlog::error("PandaBody::control: command mode is not supported by the legacy adapter");
+            return {true, "UnsupportedCommandMode", ""};
+    }
+}
+
 void PandaBody::dummy_control(std::function<franka::Torques (const franka::RobotState &,franka::Duration)> controller_callback){
     spdlog::trace("PandaBody::dummy_control(Torques)");
     franka::Torques tau_J={0,0,0,0,0,0,0};
@@ -814,6 +872,26 @@ bool PandaBody::get_gripper_state(franka::GripperState &state) const{
 
 const std::unique_ptr<franka::Model>& PandaBody::get_panda_model() const{
     return m_panda_model;
+}
+
+bool PandaBody::get_robot_snapshot(control::RobotState& robot_state,
+                                   control::RobotModel& robot_model,
+                                   control::GripperState& gripper_state) const {
+    franka::RobotState native_robot_state;
+    franka::GripperState native_gripper_state;
+    if (!get_robot_state(native_robot_state) || !get_gripper_state(native_gripper_state)) {
+        return false;
+    }
+    robot_state = control::from_franka_state(native_robot_state);
+    gripper_state = control::from_franka_state(native_gripper_state);
+    if (m_panda_model) {
+        robot_model = control::from_franka_model(*m_panda_model, native_robot_state);
+    } else {
+        // Preserve the legacy no-arm/dummy configuration. It has no dynamics
+        // model, but it can still provide a deterministic neutral percept.
+        robot_model = {};
+    }
+    return true;
 }
 
 bool PandaBody::grasp(double width, double speed, double force, double epsilon_inner, double epsilon_outer) const{

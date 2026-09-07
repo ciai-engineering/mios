@@ -398,13 +398,13 @@ nlohmann::json CommandInterface::get_state([[maybe_unused]] const nlohmann::json
     mirmi_utils::write_json_array<double,7,1>(response["q"],p->proprioception.q);
     mirmi_utils::write_json_array<double,4,4>(response["O_T_EE"],p->proprioception.O_T_EE);
     response["grasped_object"]=m_memory->get_live_context()->grasped_object->name;
-    if(p->robot_mode==franka::RobotMode::kIdle){
+    if(p->robot_mode==control::RobotMode::kIdle){
         response["status"]="Idle";
     }
-    if(p->robot_mode==franka::RobotMode::kReflex){
+    if(p->robot_mode==control::RobotMode::kReflex){
         response["status"]="Reflex";
     }
-    if(p->robot_mode==franka::RobotMode::kUserStopped){
+    if(p->robot_mode==control::RobotMode::kUserStopped){
         response["status"]="UserStopped";
     }
     response["result"]=result;

@@ -37,7 +37,7 @@ std::map<std::string, std::set<std::string> > SkillParametersMoveToPoseJoint::ge
     return {{"t_settle",{}},{"speed",{}},{"acc",{}},{"q_g_offset",{}},{"q_g",{}}};
 }
 
-MoveToPoseJoint::MoveToPoseJoint(const std::string &id, Memory *memory, Portal* portal):Skill("MoveToPoseJoint",{"goal_pose"},id,memory,portal,{ControlMode::mJointTorque,ControlMode::mJointVelocity}),
+MoveToPoseJoint::MoveToPoseJoint(const std::string &id, Memory *memory, Portal* portal):Skill("MoveToPoseJoint",{"goal_pose"},id,memory,portal,{ControlMode::mJointTorque,ControlMode::mJointVelocity,ControlMode::mJointPosition}),
 m_finished(false){
 }
 

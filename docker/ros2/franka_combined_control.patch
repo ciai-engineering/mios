@@ -1,0 +1,214 @@
+diff --git a/franka_hardware/include/franka_hardware/franka_hardware_interface.hpp b/franka_hardware/include/franka_hardware/franka_hardware_interface.hpp
+index 2832a52..56201e2 100644
+--- a/franka_hardware/include/franka_hardware/franka_hardware_interface.hpp
++++ b/franka_hardware/include/franka_hardware/franka_hardware_interface.hpp
+@@ -46,6 +46,7 @@ namespace franka_hardware {
+ enum class ControlInterface {
+   None,
+   Effort,
++  JointPositionEffort,
+   JointVelocity,
+   JointPosition,
+   CartesianVelocity,
+diff --git a/franka_hardware/include/franka_hardware/robot.hpp b/franka_hardware/include/franka_hardware/robot.hpp
+index 6f6e5d6..7dcd19c 100644
+--- a/franka_hardware/include/franka_hardware/robot.hpp
++++ b/franka_hardware/include/franka_hardware/robot.hpp
+@@ -78,6 +78,9 @@ class Robot {
+   /// Starts the active control for joint position control
+   virtual void initializeJointPositionInterface();
+ 
++  /// Starts an external torque controller with a joint-position motion generator.
++  virtual void initializeJointPositionEffortInterface();
++
+   /// Starts the active control for cartesian velocity control
+   virtual void initializeCartesianVelocityInterface();
+ 
+@@ -123,6 +126,11 @@ class Robot {
+   virtual void writeOnce(const std::vector<double>& cartesian_command,
+                          const std::vector<double>& elbow_command);
+ 
++  /// Sends a joint-position motion-generator reference and external torque
++  /// together in one libfranka active-control cycle.
++  virtual void writeOnceJointPositionEffort(const std::vector<double>& position_command,
++                                            const std::vector<double>& effort_command);
++
+   /**
+    * Sets the impedance for each joint in the internal controller.
+    *
+@@ -278,6 +286,8 @@ class Robot {
+    * @param[in] joint_position joint position command.
+    */
+   void writeOnceJointPositions(const std::array<double, 7>& positions);
++  void writeOnceJointPositionsWithEfforts(const std::array<double, 7>& positions,
++                                          const std::array<double, 7>& efforts);
+ 
+   /**
+    * Cartesian velocity command with optional elbow command
+diff --git a/franka_hardware/src/franka_hardware_interface.cpp b/franka_hardware/src/franka_hardware_interface.cpp
+index 5bc239c..d01615a 100644
+--- a/franka_hardware/src/franka_hardware_interface.cpp
++++ b/franka_hardware/src/franka_hardware_interface.cpp
+@@ -247,6 +247,12 @@ void FrankaHardwareInterface::initializePositionCommands(const franka::RobotStat
+ 
+   switch (active_mode_) {
+     case ControlInterface::JointPosition:
+       std::copy(robot_state.q.begin(), robot_state.q.end(), hw_position_commands_.begin());
+       break;
++    case ControlInterface::JointPositionEffort:
++      // A combined handoff starts a new external motion generator.  Continue
++      // from its last desired target rather than the measured position, then
++      // let libfranka's limiter bridge any remaining difference safely.
++      std::copy(robot_state.q_d.begin(), robot_state.q_d.end(), hw_position_commands_.begin());
++      break;
+     case ControlInterface::CartesianPose:
+@@ -341,6 +342,9 @@ hardware_interface::return_type FrankaHardwareInterface::write(const rclcpp::Tim
+       case ControlInterface::Effort:
+         robot_->writeOnce(hw_effort_commands_);
+         break;
++      case ControlInterface::JointPositionEffort:
++        robot_->writeOnceJointPositionEffort(hw_position_commands_, hw_effort_commands_);
++        break;
+       case ControlInterface::JointVelocity:
+         robot_->writeOnce(hw_velocity_commands_);
+         break;
+@@ -489,7 +493,9 @@ hardware_interface::return_type FrankaHardwareInterface::perform_command_mode_sw
+ 
+   ControlInterface desired = ControlInterface::None;
+ 
+-  if (effort_interface_claimed_) {
++  if (effort_interface_claimed_ && position_joint_interface_claimed_) {
++    desired = ControlInterface::JointPositionEffort;
++  } else if (effort_interface_claimed_) {
+     desired = ControlInterface::Effort;
+   } else if (velocity_joint_interface_claimed_) {
+     desired = ControlInterface::JointVelocity;
+@@ -521,6 +527,10 @@ hardware_interface::return_type FrankaHardwareInterface::perform_command_mode_sw
+       robot_->initializeTorqueInterface();
+       needs_initial_command_ = false;
+       break;
++    case ControlInterface::JointPositionEffort:
++      robot_->initializeJointPositionEffortInterface();
++      needs_initial_command_ = true;
++      break;
+     case ControlInterface::JointVelocity:
+       std::fill(hw_velocity_commands_.begin(), hw_velocity_commands_.end(), 0);
+       robot_->initializeJointVelocityInterface();
+@@ -560,6 +570,18 @@ hardware_interface::return_type FrankaHardwareInterface::perform_command_mode_sw
+ hardware_interface::return_type FrankaHardwareInterface::prepare_command_mode_switch(
+     const std::vector<std::string>& start_interfaces,
+     const std::vector<std::string>& stop_interfaces) {
++  // A position interface may occur in both the outgoing native position
++  // controller and the incoming combined position/effort controller. Count
++  // each physical interface once when evaluating the mode switch.
++  auto unique_interfaces = [](const std::vector<std::string>& interfaces) {
++    auto unique = interfaces;
++    std::sort(unique.begin(), unique.end());
++    unique.erase(std::unique(unique.begin(), unique.end()), unique.end());
++    return unique;
++  };
++  const auto unique_start_interfaces = unique_interfaces(start_interfaces);
++  const auto unique_stop_interfaces = unique_interfaces(stop_interfaces);
++
+   auto contains_interface_type = [this](const std::string& interface,
+                                         const std::string& interface_type) {
+     // Check if we export this exact interface AND it matches the requested type
+@@ -596,12 +618,12 @@ hardware_interface::return_type FrankaHardwareInterface::prepare_command_mode_sw
+ 
+   for (const auto& interface : command_interfaces_info_) {
+     size_t num_stop_interface =
+-        std::count_if(stop_interfaces.begin(), stop_interfaces.end(),
++        std::count_if(unique_stop_interfaces.begin(), unique_stop_interfaces.end(),
+                       [contains_interface_type, &interface](const std::string& interface_given) {
+                         return contains_interface_type(interface_given, interface.interface_type);
+                       });
+     size_t num_start_interface =
+-        std::count_if(start_interfaces.begin(), start_interfaces.end(),
++        std::count_if(unique_start_interfaces.begin(), unique_start_interfaces.end(),
+                       [contains_interface_type, &interface](const std::string& interface_given) {
+                         return contains_interface_type(interface_given, interface.interface_type);
+                       });
+diff --git a/franka_hardware/src/robot.cpp b/franka_hardware/src/robot.cpp
+index b743df0..0a04d3c 100644
+--- a/franka_hardware/src/robot.cpp
++++ b/franka_hardware/src/robot.cpp
+@@ -162,6 +162,23 @@ void Robot::writeOnce(const std::vector<double>& cartesian_command,
+                               std::to_string(elbow_command.size()));
+ }
+ 
++void Robot::writeOnceJointPositionEffort(const std::vector<double>& position_command,
++                                         const std::vector<double>& effort_command) {
++  if (!active_control_) {
++    throw std::runtime_error("Control hasn't been started");
++  }
++  if (position_command.size() != kMaxNumberOfJoints ||
++      effort_command.size() != kMaxNumberOfJoints || !joint_position_interface_active_ ||
++      !effort_interface_active_) {
++    throw std::invalid_argument("Combined joint position/effort command is invalid.");
++  }
++  std::array<double, kMaxNumberOfJoints> positions{};
++  std::array<double, kMaxNumberOfJoints> efforts{};
++  std::copy(position_command.begin(), position_command.end(), positions.begin());
++  std::copy(effort_command.begin(), effort_command.end(), efforts.begin());
++  writeOnceJointPositionsWithEfforts(positions, efforts);
++}
++
+ void Robot::writeOnceJointEfforts(const std::array<double, 7>& efforts) {
+   std::lock_guard<realtime_tools::prio_inherit_mutex> lock(control_mutex_);
+ 
+@@ -214,6 +231,35 @@ void Robot::writeOnceJointPositions(const std::array<double, 7>& positions) {
+   active_control_->writeOnce(position_command);
+ }
+ 
++void Robot::writeOnceJointPositionsWithEfforts(const std::array<double, 7>& positions,
++                                               const std::array<double, 7>& efforts) {
++  std::lock_guard<realtime_tools::prio_inherit_mutex> lock(control_mutex_);
++  auto position_command = franka::JointPositions(positions);
++  auto torque_command = franka::Torques(efforts);
++  if (joint_position_command_low_pass_filter_active_) {
++    for (size_t i = 0; i < 7; ++i) {
++      position_command.q.at(i) =
++          franka::lowpassFilter(franka::kDeltaT, position_command.q.at(i), current_state_.q_d.at(i),
++                                low_pass_filter_cut_off_freq);
++    }
++  }
++  // A freshly started external motion generator has no previous command of
++  // its own.  Rate-limit this first combined reference unconditionally so
++  // it remains continuous with libfranka's last desired trajectory.
++  if (true) {
++    position_command.q = franka::limitRate(
++        franka::computeUpperLimitsJointVelocity(current_state_.q_d),
++        franka::computeLowerLimitsJointVelocity(current_state_.q_d),
++        franka::kMaxJointAcceleration, franka::kMaxJointJerk, position_command.q,
++        current_state_.q_d, current_state_.dq_d, current_state_.ddq_d);
++  }
++  if (torque_command_rate_limiter_active_) {
++    torque_command.tau_J =
++        franka::limitRate(franka::kMaxTorqueRate, torque_command.tau_J, current_state_.tau_J_d);
++  }
++  active_control_->writeOnce(position_command, std::optional<const franka::Torques>{torque_command});
++}
++
+ franka::CartesianVelocities Robot::preProcessCartesianVelocities(
+     const franka::CartesianVelocities& velocity_command) {
+   franka::CartesianVelocities filtered_velocity_command = velocity_command;
+@@ -337,6 +380,19 @@ void Robot::initializeJointPositionInterface() {
+   joint_position_interface_active_ = true;
+ }
+ 
++void Robot::initializeJointPositionEffortInterface() {
++  try {
++    active_control_ = robot_->startJointPositionControl(
++        research_interface::robot::Move::ControllerMode::kExternalController);
++  } catch (const franka::ControlException& e) {
++    robot_->automaticErrorRecovery();
++    active_control_ = robot_->startJointPositionControl(
++        research_interface::robot::Move::ControllerMode::kExternalController);
++  }
++  joint_position_interface_active_ = true;
++  effort_interface_active_ = true;
++}
++
+ void Robot::initializeCartesianVelocityInterface() {
+   try {
+     active_control_ = robot_->startCartesianVelocityControl(

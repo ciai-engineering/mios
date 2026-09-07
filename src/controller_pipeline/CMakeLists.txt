@@ -6,6 +6,9 @@ set(${MODULE_NAME}_SRC
     src/cart_joint_torque_pipeline.cpp
     src/joint_torque_pipeline.cpp
     src/joint_velocity_pipeline.cpp
+    src/joint_position_pipeline.cpp
+    src/joint_position_pipeline_math.cpp
+    src/mios_algorithm_executor.cpp
     src/null_pipeline.cpp
     )
 
@@ -16,6 +19,8 @@ set(${MODULE_NAME}_HEADER_FILES
     include/${PROJECT_NAME}/${MODULE_NAME}/cart_velocity_pipeline.hpp
     include/${PROJECT_NAME}/${MODULE_NAME}/joint_torque_pipeline.hpp
     include/${PROJECT_NAME}/${MODULE_NAME}/joint_velocity_pipeline.hpp
+    include/${PROJECT_NAME}/${MODULE_NAME}/joint_position_pipeline.hpp
+    include/${PROJECT_NAME}/${MODULE_NAME}/mios_algorithm_executor.hpp
     include/${PROJECT_NAME}/${MODULE_NAME}/null_pipeline.hpp
     )
 
@@ -56,9 +61,8 @@ target_link_libraries(${MODULE_NAME}
     cntr_nullsp_proj::cntr_nullsp_proj
     cntr_mux::cntr_mux
     conv_vel2pose::conv_vel2pose
-    ${PROJECT_NAME}::memory
+    ${PROJECT_NAME}::safety
     ${PROJECT_NAME}::utils
-    Franka::Franka
     Eigen3::Eigen
     )
 
@@ -66,3 +70,17 @@ set_target_properties(${MODULE_NAME} PROPERTIES PUBLIC_HEADER "${${MODULE_NAME}_
 
 apply_module_options(${MODULE_NAME})
 
+if(ENABLE_TESTING)
+    add_executable(test_joint_position_pipeline
+        test/test_joint_position_pipeline.cpp
+        src/joint_position_pipeline_math.cpp)
+    target_compile_features(test_joint_position_pipeline PRIVATE cxx_std_17)
+    target_include_directories(test_joint_position_pipeline PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_SOURCE_DIR}/src/utils/include)
+    target_link_libraries(test_joint_position_pipeline PRIVATE
+        ${PROJECT_NAME}::${PROJECT_NAME}_project_deps
+        Eigen3::Eigen)
+    add_test(NAME test_joint_position_pipeline COMMAND test_joint_position_pipeline)
+endif()

@@ -7,10 +7,11 @@ VelocityWallsSafetyModule::VelocityWallsSafetyModule(){
     m_brake_distance=0;
 }
 
-void VelocityWallsSafetyModule::initialize(const Percept &p_0, const Memory *memory){
-    m_walls=memory->read_parameters()->safety.velocity_walls.walls;
-    m_brake_distance=memory->read_parameters()->safety.velocity_walls.brake_distance;
-    m_active=memory->read_parameters()->safety.velocity_walls.active;
+void VelocityWallsSafetyModule::initialize([[maybe_unused]] const Percept &p_0,
+                                           const control::ControlRuntimeConfig& config){
+    m_walls=config.safety.velocity_walls.walls;
+    m_brake_distance=config.safety.velocity_walls.brake_distance;
+    m_active=config.safety.velocity_walls.active;
 }
 
 void VelocityWallsSafetyModule::step(const Percept &p, Actuator &cmd){

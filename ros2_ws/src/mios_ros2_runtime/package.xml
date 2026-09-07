@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>mios_ros2_runtime</name>
+  <version>0.1.0</version>
+  <description>Non-FCI MIOS runtime transport for ROS 2 Franka hardware.</description>
+  <maintainer email="maintainers@example.invalid">MIOS maintainers</maintainer>
+  <license>BSD-3-Clause</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <build_depend>franka_msgs</build_depend>
+  <build_depend>mios_msgs</build_depend>
+  <build_depend>rclcpp</build_depend>
+  <build_depend>rclcpp_action</build_depend>
+  <build_depend>sensor_msgs</build_depend>
+  <build_depend>std_srvs</build_depend>
+  <exec_depend>franka_msgs</exec_depend>
+  <exec_depend>mios_msgs</exec_depend>
+  <exec_depend>rclcpp</exec_depend>
+  <exec_depend>rclcpp_action</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>std_srvs</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

@@ -11,13 +11,12 @@ VirtualCubeSafetyModule::~VirtualCubeSafetyModule(){
     spdlog::trace("VirtualCubeSafetyModule::~VirtualCubeSafetyModule()");
 }
 
-void VirtualCubeSafetyModule::initialize(const Percept &p_0, const Memory *memory){
-    initialize_virt_cube(p_0,memory);
+void VirtualCubeSafetyModule::initialize(const Percept &p_0, const control::ControlRuntimeConfig& config){
+    initialize_virt_cube(p_0,config);
 }
 
-void VirtualCubeSafetyModule::step(const Percept &p, franka::Finishable *cmd){
-    if(m_virtual_cube_on){
-        franka::Torques* cmd_torques = static_cast<franka::Torques*>(cmd);
+void VirtualCubeSafetyModule::step(const Percept &p, control::ArmCommand& cmd){
+    if(m_virtual_cube_on && cmd.mode == control::CommandMode::kTorque){
         input_virt_cube(p);
         m_cube.step();
         if(!m_safe_activation && is_cube_valid(p)){
@@ -25,7 +24,7 @@ void VirtualCubeSafetyModule::step(const Percept &p, franka::Finishable *cmd){
         }
         if(m_safe_activation){
             for(unsigned i=0;i<7;i++){
-                cmd_torques->tau_J[i]+=m_cube.y.tau_vwalls[i];
+                cmd.joints[i] += m_cube.y.tau_vwalls[i];
             }
         }
     }
@@ -35,8 +34,8 @@ void VirtualCubeSafetyModule::terminate(){
     m_cube.terminate();
 }
 
-void VirtualCubeSafetyModule::initialize_virt_cube(const Percept &p,const Memory* memory){
-    const SafetyParameters& p_safety=memory->read_parameters()->safety;
+void VirtualCubeSafetyModule::initialize_virt_cube(const Percept &p,const control::ControlRuntimeConfig& config){
+    const SafetyParameters& p_safety=config.safety;
     m_cube.p.damping_distance<<p_safety.virtual_cube.damping_dist;
     m_cube.p.damping_factor<<p_safety.virtual_cube.damping;
     m_cube.p.eta<<p_safety.virtual_cube.eta;
@@ -47,7 +46,7 @@ void VirtualCubeSafetyModule::initialize_virt_cube(const Percept &p,const Memory
     input_virt_cube(p);
     m_cube.initialize(true,5000);
 
-    m_virtual_cube_on=memory->read_parameters()->safety.virtual_cube.active;
+    m_virtual_cube_on=config.safety.virtual_cube.active;
 }
 
 void VirtualCubeSafetyModule::input_virt_cube(const Percept &p){

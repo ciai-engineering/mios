@@ -10,12 +10,12 @@ public:
     VirtualCubeSafetyModule();
     ~VirtualCubeSafetyModule();
 
-    void initialize(const Percept &p_0, const Memory *memory) override;
-    void step(const Percept &p, franka::Finishable* cmd) override;
+    void initialize(const Percept &p_0, const control::ControlRuntimeConfig& config) override;
+    void step(const Percept &p, control::ArmCommand& cmd) override;
     void terminate() override;
 
 private:
-    void initialize_virt_cube(const Percept &p, const Memory *memory);
+    void initialize_virt_cube(const Percept &p, const control::ControlRuntimeConfig& config);
     void input_virt_cube(const Percept& p);
     bool is_cube_valid(const Percept &p);
 

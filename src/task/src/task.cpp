@@ -69,7 +69,7 @@ void Task::write_result(){
         spdlog::warn("Could not refresh perception, final checks may be invalid.");
     }
     const Percept* p_final = m_core->get_percept();
-    if(p_final->robot_mode==franka::RobotMode::kUserStopped){
+    if(p_final->robot_mode==control::RobotMode::kUserStopped){
         write_error("UserStopped");
     }
 }

@@ -175,7 +175,18 @@ public:
     }cartesian_velocity_damping;
 };
 
-enum ControlMode{mCartTorque,mJointTorque,mCartVelocity,mJointVelocity,mNoControl};
+// Keep the numeric values of the historical modes stable because they are
+// stored in task JSON contexts.  The ROS 2 joint-position transport was added
+// after the original modes, so it intentionally uses a new value instead of
+// shifting mNoControl.
+enum ControlMode{
+    mCartTorque = 0,
+    mJointTorque = 1,
+    mCartVelocity = 2,
+    mJointVelocity = 3,
+    mNoControl = 4,
+    mJointPosition = 5,
+};
 
 class ControlParameters : public IParameters{
 public:

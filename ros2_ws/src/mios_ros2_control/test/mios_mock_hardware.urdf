@@ -1,0 +1,40 @@
+<?xml version="1.0"?>
+<!--
+  Hardware-free controller configuration fixture. It has the seven FR3 joint
+  names and at least nine links required while the Franka state semantic
+  component initializes its preallocated message. It deliberately has no
+  Franka model/robot-state semantic interfaces; this matches the default MIOS
+  configuration, where Cartesian model-dependent safety terms are disabled.
+  It can therefore exercise the hardware-free stationary activation gate.
+-->
+<robot name="fr3">
+  <link name="fr3_link0"/>
+  <link name="fr3_link1"/>
+  <link name="fr3_link2"/>
+  <link name="fr3_link3"/>
+  <link name="fr3_link4"/>
+  <link name="fr3_link5"/>
+  <link name="fr3_link6"/>
+  <link name="fr3_link7"/>
+  <link name="fr3_flange"/>
+
+  <joint name="fr3_joint1" type="revolute"><parent link="fr3_link0"/><child link="fr3_link1"/><axis xyz="0 0 1"/><limit lower="-1.0" upper="1.0" effort="1.0" velocity="1.0"/></joint>
+  <joint name="fr3_joint2" type="revolute"><parent link="fr3_link1"/><child link="fr3_link2"/><axis xyz="0 0 1"/><limit lower="-1.0" upper="1.0" effort="1.0" velocity="1.0"/></joint>
+  <joint name="fr3_joint3" type="revolute"><parent link="fr3_link2"/><child link="fr3_link3"/><axis xyz="0 0 1"/><limit lower="-1.0" upper="1.0" effort="1.0" velocity="1.0"/></joint>
+  <joint name="fr3_joint4" type="revolute"><parent link="fr3_link3"/><child link="fr3_link4"/><axis xyz="0 0 1"/><limit lower="-1.0" upper="1.0" effort="1.0" velocity="1.0"/></joint>
+  <joint name="fr3_joint5" type="revolute"><parent link="fr3_link4"/><child link="fr3_link5"/><axis xyz="0 0 1"/><limit lower="-1.0" upper="1.0" effort="1.0" velocity="1.0"/></joint>
+  <joint name="fr3_joint6" type="revolute"><parent link="fr3_link5"/><child link="fr3_link6"/><axis xyz="0 0 1"/><limit lower="-1.0" upper="1.0" effort="1.0" velocity="1.0"/></joint>
+  <joint name="fr3_joint7" type="revolute"><parent link="fr3_link6"/><child link="fr3_link7"/><axis xyz="0 0 1"/><limit lower="-1.0" upper="1.0" effort="1.0" velocity="1.0"/></joint>
+  <joint name="fr3_flange_joint" type="fixed"><parent link="fr3_link7"/><child link="fr3_flange"/><origin xyz="0 0 0" rpy="0 0 0"/></joint>
+
+  <ros2_control name="mios_mock_system" type="system">
+    <hardware><plugin>mock_components/GenericSystem</plugin></hardware>
+    <joint name="fr3_joint1"><command_interface name="effort"/><command_interface name="position"/><command_interface name="velocity"/><state_interface name="position"/><state_interface name="velocity"/><state_interface name="effort"/></joint>
+    <joint name="fr3_joint2"><command_interface name="effort"/><command_interface name="position"/><command_interface name="velocity"/><state_interface name="position"/><state_interface name="velocity"/><state_interface name="effort"/></joint>
+    <joint name="fr3_joint3"><command_interface name="effort"/><command_interface name="position"/><command_interface name="velocity"/><state_interface name="position"/><state_interface name="velocity"/><state_interface name="effort"/></joint>
+    <joint name="fr3_joint4"><command_interface name="effort"/><command_interface name="position"/><command_interface name="velocity"/><state_interface name="position"/><state_interface name="velocity"/><state_interface name="effort"/></joint>
+    <joint name="fr3_joint5"><command_interface name="effort"/><command_interface name="position"/><command_interface name="velocity"/><state_interface name="position"/><state_interface name="velocity"/><state_interface name="effort"/></joint>
+    <joint name="fr3_joint6"><command_interface name="effort"/><command_interface name="position"/><command_interface name="velocity"/><state_interface name="position"/><state_interface name="velocity"/><state_interface name="effort"/></joint>
+    <joint name="fr3_joint7"><command_interface name="effort"/><command_interface name="position"/><command_interface name="velocity"/><state_interface name="position"/><state_interface name="velocity"/><state_interface name="effort"/></joint>
+  </ros2_control>
+</robot>

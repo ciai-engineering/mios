@@ -2,6 +2,7 @@ set(MODULE_NAME panda)
 
 set(${MODULE_NAME}_SRC
     src/panda_body.cpp
+    ../utils/src/franka_adapter.cpp
     src/qbmove_communications.cpp
     src/softhand2.cpp
     )
@@ -54,4 +55,3 @@ target_link_libraries(${MODULE_NAME}
     )
 
 apply_module_options(${MODULE_NAME})
-

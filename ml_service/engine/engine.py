@@ -1,6 +1,7 @@
 import time
 import datetime
 import logging
+import os
 from threading import Thread
 from threading import Lock
 from queue import Queue
@@ -81,22 +82,30 @@ class Engine:
         self.free_agents = agents
         self.queued_trials = Queue()
         self.completed_trials = dict()
-        try:
-            self.redisClient = redis.Redis(
-                    host="redis-master.global", 
-                    port=6379, 
-                    db=0, 
-                    decode_responses=True,
-                    password="QqJ3JDqNjN",
-                    socket_connect_timeout=2,    # Fail if can't connect in 2 second
-                    socket_timeout=2             # Fail if operations take > 2 second
-                 )
-            self.redisClient.ping()
-        except redis.RedisError as e:
-            logger.error("Redis connection failed: " + str(e))
-            self.redisClient = None
+        # Redis is only an optional notification sink.  Keep it disabled by
+        # default for a standalone robot deployment; enable it explicitly for
+        # a collective-learning deployment with MIOS_ENABLE_REDIS=true.
+        self.redisClient = None
+        if os.getenv("MIOS_ENABLE_REDIS", "false").strip().lower() in {"1", "true", "yes", "on"}:
+            try:
+                self.redisClient = redis.Redis(
+                        host="redis-master.global",
+                        port=6379,
+                        db=0,
+                        decode_responses=True,
+                        password="QqJ3JDqNjN",
+                        socket_connect_timeout=2,
+                        socket_timeout=2,
+                     )
+                self.redisClient.ping()
+            except redis.RedisError as e:
+                logger.error("Redis connection failed: " + str(e))
+                self.redisClient = None
         self.database_client = MongoDBClient(port=self.mongo_port)
-        self.log_client = MongoDBClient("mongodb.global")
+        self.log_client = MongoDBClient(
+            os.getenv("MIOS_ML_LOG_MONGO_HOST", "localhost"),
+            port=self.mongo_port,
+        )
         self.database_results_collection = None
         self.database_results_id = None
 

@@ -1,0 +1,23 @@
+services:
+  mios_direct:
+    build:
+      context: ../../..
+      dockerfile: mios/docker/direct/Dockerfile
+    image: mios-direct-libfranka:local
+    network_mode: host
+    ipc: host
+    cap_add:
+      - SYS_NICE
+    ulimits:
+      rtprio: 99
+      memlock: -1
+    environment:
+      verbosity: ${MIOS_VERBOSITY:-info}
+      robot_ip: ${ROBOT_IP:-192.168.4.100}
+      database_name: ${MONGO_DB_NAME:-mios}
+      database_port: ${MONGO_PORT:-27017}
+      robot_config: ${ROBOT_CONFIG:-0}
+      desk: "false"
+      websocket_port: ${MIOS_WS_PORT:-12000}
+      rpc_port: ${MIOS_RPC_PORT:-12001}
+      udp_port: ${MIOS_UDP_PORT:-12002}

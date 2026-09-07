@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<library path="mios_effort_controller">
+  <class name="mios_ros2_control/MiosRobotModelBroadcaster"
+         type="mios_ros2_control::MiosRobotModelBroadcaster"
+         base_class_type="controller_interface::ControllerInterface">
+    <description>Read-only MIOS publisher for ROS-owned Franka model state.</description>
+  </class>
+  <class name="mios_ros2_control/MiosEffortController"
+         type="mios_ros2_control::MiosEffortController"
+         base_class_type="controller_interface::ControllerInterface">
+    <description>MIOS bridge controller for Franka effort command interfaces.</description>
+  </class>
+  <class name="mios_ros2_control/MiosZeroEffortDiagnosticController"
+         type="mios_ros2_control::MiosZeroEffortDiagnosticController"
+         base_class_type="controller_interface::ControllerInterface">
+    <description>Gated diagnostic controller that writes exactly zero effort.</description>
+  </class>
+  <class name="mios_ros2_control/MiosJointVelocityController"
+         type="mios_ros2_control::MiosJointVelocityController"
+         base_class_type="controller_interface::ControllerInterface">
+    <description>MIOS bridge controller for Franka joint velocity command interfaces.</description>
+  </class>
+  <class name="mios_ros2_control/MiosCartesianVelocityController"
+         type="mios_ros2_control::MiosCartesianVelocityController"
+         base_class_type="controller_interface::ControllerInterface">
+    <description>MIOS bridge controller for Franka Cartesian velocity command interfaces.</description>
+  </class>
+  <class name="mios_ros2_control/MiosJointPositionController"
+         type="mios_ros2_control::MiosJointPositionController"
+         base_class_type="controller_interface::ControllerInterface">
+    <description>MIOS bridge controller for Franka joint position command interfaces.</description>
+  </class>
+  <class name="mios_ros2_control/MiosCartesianPoseController"
+         type="mios_ros2_control::MiosCartesianPoseController"
+         base_class_type="controller_interface::ControllerInterface">
+    <description>MIOS bridge controller for Franka Cartesian pose command interfaces.</description>
+  </class>
+</library>

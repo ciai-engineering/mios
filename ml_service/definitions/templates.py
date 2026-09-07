@@ -8,8 +8,7 @@ class InsertionFactory(ProblemDefinitionFactory):
                          setup_skills=[("MoveToPoseJoint", "move", "move_joint")],
                          reset_skills=[("TaxExtraction", "extraction", "extraction"),
                           ("MoveToPoseJoint", "move_approach", "move_joint")], 
-                          rescue_skils=[("MoveToPoseJoint", "move_away", "move_joint"),
-                                        ("MoveToPoseJoint", "move_back", "move_joint")],
+                          rescue_skils=[("MoveToPoseJoint", "move_back", "move_joint")],
                           termination_skills=[], cost_function=cost_function, objects=objects, mios_port=mios_port)
 
     def get_limits(self):
@@ -131,9 +130,6 @@ class InsertionFactory(ProblemDefinitionFactory):
         
         self.reset_instructions[0]["preconditions"] = {"grasped_object":self.objects["Insertable"]}
 
-        #self.rescue_instructions[0]["parameters"]["skills"]["move_away"]["skill"]["objects"]["GoalPose"] = "EndEffector"
-        #self.rescue_instructions[0]["parameters"]["skills"]["move_away"]["skill"]["p0"]["T_T_EE_g_offset"] = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0.05, 0, 0.05, 1]
-        self.rescue_instructions[0]["parameters"]["skills"]["move_away"]["skill"]["objects"]["goal_pose"] = "default"
         self.rescue_instructions[0]["parameters"]["skills"]["move_back"]["skill"]["objects"]["goal_pose"] = self.objects[
             "Approach"]
         

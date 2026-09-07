@@ -19,23 +19,40 @@
 
 namespace mios {
 
-MongodbClient::MongodbClient(const std::string &database, unsigned port){
+MongodbClient::MongodbClient(const std::string &database, unsigned port,
+                             bool connect_immediately):
+    m_database_name(database),
+    m_database_port(port){
     spdlog::trace("MongodbClient::MongodbClient");
+    if(connect_immediately){
+        connect();
+    }
+}
+
+bool MongodbClient::connect(){
+    spdlog::trace("MongodbClient::connect");
     std::scoped_lock<std::mutex> lock(m_mutex_db_access);
-    spdlog::debug("Connecting to database " + database + " on localhost:" + std::to_string(port));
-    mongocxx::uri uri("mongodb://localhost:"+std::to_string(port));
+    if(m_connected){
+        return true;
+    }
+
+    spdlog::debug("Connecting to database " + m_database_name + " on localhost:" +
+                  std::to_string(m_database_port));
+    mongocxx::uri uri("mongodb://localhost:"+std::to_string(m_database_port));
     m_client = mongocxx::client(uri);
     bool found_database=false;
     bool message_displayed=false;
     while(!found_database){
         try{
             std::vector<std::string> db_names=m_client.list_database_names();
-            m_mongodb=m_client.database(database);
+            m_mongodb=m_client.database(m_database_name);
             m_collections.clear();
             m_collections.insert(std::pair<const char*,mongocxx::collection>("frames",m_mongodb["frames"]));
             m_collections.insert(std::pair<const char*,mongocxx::collection>("environment",m_mongodb["environment"]));
             m_collections.insert(std::pair<const char*,mongocxx::collection>("parameters",m_mongodb["parameters"]));
+            m_collections.insert(std::pair<const char*,mongocxx::collection>("tasks",m_mongodb["tasks"]));
             found_database=true;
+            m_connected=true;
             spdlog::debug("Mongodb client initialized.");
         }catch(const mongocxx::exception& e){
             if(!message_displayed){
@@ -46,6 +63,7 @@ MongodbClient::MongodbClient(const std::string &database, unsigned port){
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
+    return true;
 }
 
 bool MongodbClient::read_documents(const std::string &collection, std::set<nlohmann::json> &docs){

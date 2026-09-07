@@ -8,8 +8,8 @@ class CartesianVelocityDampingSafetyModule : public SafetyModuleStage2{
 public:
     CartesianVelocityDampingSafetyModule();
 
-    void initialize(const Percept &p_0, const Memory *memory) override;
-    void step(const Percept &p, franka::Finishable* cmd) override;
+    void initialize(const Percept &p_0, const control::ControlRuntimeConfig& config) override;
+    void step(const Percept &p, control::ArmCommand& cmd) override;
     void terminate() override;
 
 private:

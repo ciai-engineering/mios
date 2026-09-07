@@ -1,0 +1,17 @@
+services:
+  mios_ros2:
+    build:
+      context: ../../..
+      dockerfile: mios/docker/ros2/Dockerfile
+    image: mios-ros2-jazzy:local
+    network_mode: host
+    cap_add:
+      - SYS_NICE
+    ulimits:
+      rtprio: 99
+      memlock: -1
+    ipc: host
+    environment:
+      ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-0}
+    stdin_open: true
+    tty: true

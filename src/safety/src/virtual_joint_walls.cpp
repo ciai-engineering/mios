@@ -6,17 +6,16 @@ VirtualJointWallsSafetyModule::VirtualJointWallsSafetyModule():m_virtual_walls_o
 
 }
 
-void VirtualJointWallsSafetyModule::initialize(const Percept &p_0, const Memory *memory){
-    initialize_virt_walls(p_0,memory);
+void VirtualJointWallsSafetyModule::initialize(const Percept &p_0, const control::ControlRuntimeConfig& config){
+    initialize_virt_walls(p_0,config);
 }
 
-void VirtualJointWallsSafetyModule::step(const Percept &p, franka::Finishable *cmd){
-    if(m_virtual_walls_on){
-        franka::Torques* cmd_torques = static_cast<franka::Torques*>(cmd);
+void VirtualJointWallsSafetyModule::step(const Percept &p, control::ArmCommand& cmd){
+    if(m_virtual_walls_on && cmd.mode == control::CommandMode::kTorque){
         input_virt_walls(p);
         m_walls.step();
         for(unsigned i=0;i<7;i++){
-            cmd_torques->tau_J[i]+=m_walls.y.tau_vwalls[i];
+            cmd.joints[i] += m_walls.y.tau_vwalls[i];
         }
     }
 }
@@ -25,8 +24,8 @@ void VirtualJointWallsSafetyModule::terminate(){
     m_walls.terminate();
 }
 
-void VirtualJointWallsSafetyModule::initialize_virt_walls(const Percept &p,const Memory* memory){
-    const SafetyParameters& p_cntr=memory->read_parameters()->safety;
+void VirtualJointWallsSafetyModule::initialize_virt_walls(const Percept &p,const control::ControlRuntimeConfig& config){
+    const SafetyParameters& p_cntr=config.safety;
     m_walls.p.damping_distance=p_cntr.virtual_joint_walls.damping_dist;
     m_walls.p.damping_factor=p_cntr.virtual_joint_walls.damping;
     m_walls.p.eta=p_cntr.virtual_joint_walls.eta;
@@ -38,7 +37,7 @@ void VirtualJointWallsSafetyModule::initialize_virt_walls(const Percept &p,const
 
     m_walls.initialize();
 
-    m_virtual_walls_on=memory->read_parameters()->safety.virtual_joint_walls.active;
+    m_virtual_walls_on=config.safety.virtual_joint_walls.active;
 }
 
 void VirtualJointWallsSafetyModule::input_virt_walls(const Percept &p){

@@ -675,6 +675,8 @@ bool ControlParameters::from_json(const nlohmann::json &parameters){
         control_mode=ControlMode::mCartVelocity;
     }else if(control_mode_tmp==3){
         control_mode=ControlMode::mJointVelocity;
+    }else if(control_mode_tmp==5){
+        control_mode=ControlMode::mJointPosition;
     }else{
         control_mode=ControlMode::mNoControl;
     }

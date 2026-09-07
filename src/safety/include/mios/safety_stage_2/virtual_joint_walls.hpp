@@ -9,12 +9,12 @@ class VirtualJointWallsSafetyModule : public SafetyModuleStage2{
 public:
     VirtualJointWallsSafetyModule();
 
-    void initialize(const Percept &p_0, const Memory *memory) override;
-    void step(const Percept &p, franka::Finishable* cmd) override;
+    void initialize(const Percept &p_0, const control::ControlRuntimeConfig& config) override;
+    void step(const Percept &p, control::ArmCommand& cmd) override;
     void terminate() override;
 
 private:
-    void initialize_virt_walls(const Percept &p, const Memory *memory);
+    void initialize_virt_walls(const Percept &p, const control::ControlRuntimeConfig& config);
     void input_virt_walls(const Percept& p);
     bool is_walls_valid(const Percept &p);
 

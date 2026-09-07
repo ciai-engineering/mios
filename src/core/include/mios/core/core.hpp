@@ -1,18 +1,16 @@
 #pragma once
 
+#include <memory>
+#include <optional>
 #include <string>
-#include <set>
 #include <mutex>
 
-#include "mios/controller_pipeline/controller_pipeline.hpp"
+#include "mios/controller_pipeline/mios_algorithm_executor.hpp"
 #include "mios/interface/interface.hpp"
 //#include "mios/interface/ros_node.hpp"
 #include "mios/learning_module/learning_module.hpp"
 #include "mios/memory/memory.hpp"
-#include "mios/panda/panda_body.hpp"
 #include "mios/portal/portal.hpp"
-#include "mios/safety_stage_1/safety_module_stage_1.hpp"
-#include "mios/safety_stage_2/safety_module_stage_2.hpp"
 #include "mios/skill/skill_engine.hpp"
 #include "mios/skill/skill_library.hpp"
 #include "mios/task/task_engine.hpp"
@@ -27,10 +25,18 @@
 namespace mios {
 
 class Skill;
+class RobotBackend;
 
 class Core{
 public:
-    Core(const MiosContext &context);
+#ifdef MIOS_HAS_DIRECT_PANDA_BACKEND
+    // The standalone direct build owns FCI through PandaBody. This overload
+    // is not compiled into the ROS-owned Core, preventing two FCI owners.
+    explicit Core(const MiosContext &context);
+#endif
+    // The caller supplies the only robot backend. In the ROS-only path this
+    // backend communicates through ROS 2 and never owns an FCI connection.
+    Core(const MiosContext &context, std::unique_ptr<RobotBackend> robot_backend);
     ~Core();
 
     bool initialize();
@@ -79,11 +85,13 @@ public:
     MiosContext m_context;
 
 private:
-    franka::Finishable *control_base_cycle(const franka::RobotState& state);
-    franka::Torques cart_torque_controller_pipeline(const franka::RobotState& state);
-    franka::Torques joint_torque_controller_pipeline(const franka::RobotState& state);
-    franka::CartesianVelocities cart_velocity_controller_pipeline(const franka::RobotState& state);
-    franka::JointVelocities joint_velocity_controller_pipeline(const franka::RobotState& state);
+    control::ArmCommand control_base_cycle(const control::RobotState& robot_state,
+                                           const control::RobotModel& robot_model,
+                                           const control::GripperState& gripper_state,
+                                           control::CommandMode command_mode);
+    bool configure_control_executor(std::unique_ptr<ControllerPipeline> pipeline,
+                                    control::CommandMode command_mode,
+                                    bool add_cartesian_velocity_damping);
 
     void handle_gripper(Actuator* cmd);
 
@@ -92,7 +100,7 @@ private:
 
     Memory m_memory;
     SkillEngine m_skill_engine;
-    PandaBody m_panda_body;
+    std::unique_ptr<RobotBackend> m_robot_backend;
     Portal m_portal;
     SkillLibrary m_skill_library;
     TaskEngine m_task_engine;
@@ -100,9 +108,7 @@ private:
     //RosNode m_ros_node;
     LearningModule m_learning_module;
     TelemetryUDP m_telemetry;
-    std::unique_ptr<ControllerPipeline> m_controller_pipeline;
-    std::set<std::unique_ptr<SafetyModuleStage1> > m_safety_stage_1;
-    std::set<std::unique_ptr<SafetyModuleStage2> > m_safety_stage_2;
+    std::unique_ptr<MiosAlgorithmExecutor> m_control_executor;
 
 private:
     bool m_is_ready;

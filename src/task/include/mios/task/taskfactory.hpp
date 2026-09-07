@@ -7,7 +7,7 @@ namespace mios{
 class Task;
 class Core;
 enum TaskName{TaskNameNullTask,TaskNameTestTask2,TaskNameLearnerTest,TaskNameMoveToCartPose,TaskNameMoveToJointPose,TaskNameTestTask3,TaskNameGenericTask,TaskNameTestTask1,TaskNameIdleTask,
-              TaskNameInsertObject,TaskNameExtractObject};
+              TaskNameInsertObject,TaskNameExtractObject,TaskNameRos2NoMotionSelfTest};
 class TaskFactory{
 public:
     static TaskName get_task_name(const std::string& task);

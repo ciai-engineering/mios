@@ -5,7 +5,7 @@
             "Approach": "approach",
             "Insertable": "insertable"
         },
-        "time_max": 5,
+        "time_max": 15,
         "p0": {
             "dX_d": [0.1, 1],
             "ddX_d": [0.5, 4],

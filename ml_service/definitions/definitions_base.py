@@ -33,7 +33,12 @@ class ProblemDefinitionFactory(ABC):
 
     def __init__(self, robots: list, skill_class: str, learn_skills: list, setup_skills: list, reset_skills: list, rescue_skils:list,
                  termination_skills: list, cost_function: CostFunctionFactory, objects: dict, mios_port=12000):
-        self.path_to_default_context = os.getcwd() + "/../python/taxonomy/default_contexts/"
+        project_root = os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        )
+        self.path_to_default_context = os.path.join(
+            project_root, "python", "taxonomy", "default_contexts"
+        )
         self.skill_class = skill_class
         self.cost_function = cost_function
         #print(robots)
@@ -88,7 +93,7 @@ class ProblemDefinitionFactory(ABC):
             "skills": dict()
         }
         for s in learn_skills:
-            f = open(self.path_to_default_context + s[2] + ".json")
+            f = open(os.path.join(self.path_to_default_context, s[2] + ".json"))
             self.learn_context["skills"][s[1]] = json.load(f)
             self.learn_context["parameters"]["skill_types"].append(s[0])
             self.learn_context["parameters"]["skill_names"].append(s[1])
@@ -107,7 +112,7 @@ class ProblemDefinitionFactory(ABC):
             "skills": dict()
         }
         for s in setup_skills:
-            f = open(self.path_to_default_context + s[2] + ".json")
+            f = open(os.path.join(self.path_to_default_context, s[2] + ".json"))
             setup_context["skills"][s[1]] = json.load(f)
             setup_context["parameters"]["skill_types"].append(s[0])
             setup_context["parameters"]["skill_names"].append(s[1])
@@ -128,7 +133,7 @@ class ProblemDefinitionFactory(ABC):
             "skills": dict()
         }
         for s in reset_skills:
-            f = open(self.path_to_default_context + s[2] + ".json")
+            f = open(os.path.join(self.path_to_default_context, s[2] + ".json"))
             reset_context["skills"][s[1]] = json.load(f)
             reset_context["parameters"]["skill_types"].append(s[0])
             reset_context["parameters"]["skill_names"].append(s[1])
@@ -149,7 +154,7 @@ class ProblemDefinitionFactory(ABC):
             "skills": dict()
         }
         for s in termination_skills:
-            f = open(self.path_to_default_context + s[2] + ".json")
+            f = open(os.path.join(self.path_to_default_context, s[2] + ".json"))
             self.termination_instructions.append(json.load(f))
             termination_context["skills"][s[1]] = json.load(f)
             termination_context["parameters"]["skill_types"].append(s[0])
@@ -169,7 +174,7 @@ class ProblemDefinitionFactory(ABC):
             "skills": dict()
         }
         for s in rescue_skills:
-            f = open(self.path_to_default_context + s[2] + ".json")
+            f = open(os.path.join(self.path_to_default_context, s[2] + ".json"))
             rescue_context["skills"][s[1]] = json.load(f)
             rescue_context["parameters"]["skill_types"].append(s[0])
             rescue_context["parameters"]["skill_names"].append(s[1])
@@ -190,7 +195,7 @@ class ProblemDefinitionFactory(ABC):
             "skills": dict()
         }
         for s in termination_skills:
-            f = open(self.path_to_default_context + s[2] + ".json")
+            f = open(os.path.join(self.path_to_default_context, s[2] + ".json"))
             self.termination_instructions.append(json.load(f))
             termination_context["skills"][s[1]] = json.load(f)
             termination_context["parameters"]["skill_types"].append(s[0])

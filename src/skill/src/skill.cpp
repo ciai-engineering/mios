@@ -8,7 +8,6 @@
 #include "mirmi_cpp_utils/json/json.hpp"
 #include "mirmi_cpp_utils/benchmarking/benchmarking.hpp"
 #include "spdlog/spdlog.h"
-#include "franka/exception.h"
 
 #include <chrono>
 #include <cmath>
@@ -19,7 +18,8 @@ namespace mios {
 Skill::Skill(const std::string &type, const std::unordered_set<std::string> &objects, const std::string& id, Memory *memory, Portal* portal,std::set<ControlMode> control_modes):
     m_memory(memory),m_portal(portal),m_active_mp(std::make_shared<ManipulationPrimitive>("NullPrimitive",Percept(),memory)),m_control_modes(control_modes),m_life_cycle(SkillLifeCycle::slInit),
     m_flag_invoke_failure(false),m_flag_invoke_success(false),m_flag_pause(false),m_flag_parallels_running(false),m_stop_factor(1.0),m_type(type),m_id(id),m_objects(objects),
-    m_msg_local_success(false),m_msg_global_success(false),m_cost_contact_forces_sum(0),m_cost_effort_avg_sum(0){
+    m_msg_local_success(false),m_msg_global_success(false),m_cost_contact_forces_sum(0),m_cost_effort_avg_sum(0),
+    m_cost_desired_force_sum(0),m_cost_desired_pose_sum(0){
     spdlog::trace("Skill::Skill()");
     m_costs.insert(std::make_pair("ExecutionTime",0));
     m_ROI_center.setZero();

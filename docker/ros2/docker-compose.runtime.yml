@@ -1,0 +1,92 @@
+services:
+  # This service is the only FCI owner in the ROS-only deployment.
+  mios_ros2_control:
+    build:
+      context: ../../..
+      dockerfile: mios/docker/ros2/Dockerfile
+    image: ${MIOS_ROS2_IMAGE:-mios-ros2-jazzy:local}
+    container_name: mios-ros2-control
+    network_mode: host
+    ipc: host
+    cap_add:
+      - SYS_NICE
+    ulimits:
+      rtprio: 99
+      memlock: -1
+    environment:
+      ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-0}
+      # Keep libfranka's FIFO-99 worker threads off the CPU used by the
+      # controller-manager update thread and the Franka NIC IRQ.  The
+      # controller's own `cpu_affinity: 6` override is applied afterwards by
+      # controller_manager, so only that 1 kHz loop returns to CPU 6.
+      # CPUs 6 and 7 are sibling hardware threads of one physical core.  CPU
+      # 6 is the controller/Franka-IRQ CPU and CPU 7 is deliberately kept
+      # idle, so no thread shares that core's execution resources.
+      MIOS_CONTROL_WORKER_CPUS: "${MIOS_CONTROL_WORKER_CPUS:-0-5,8-19}"
+    command:
+      - bash
+      - -lc
+      - >-
+        exec taskset --cpu-list "$$MIOS_CONTROL_WORKER_CPUS"
+        ros2 launch franka_bringup franka.launch.py
+        robot_type:=fr3
+        robot_ip:=${ROBOT_IP:-192.168.4.100}
+        load_gripper:=${MIOS_LOAD_GRIPPER:-false}
+        controllers_yaml:=/ws/install/mios_ros2_control/share/mios_ros2_control/config/mios_controllers.yaml
+
+  # A one-shot read-only dependency.  It never activates an arm command
+  # controller and exits once the semantic model broadcaster is ready.
+  mios_ros2_model:
+    image: ${MIOS_ROS2_IMAGE:-mios-ros2-jazzy:local}
+    container_name: mios-ros2-model-broadcaster
+    network_mode: host
+    # Keep model serialization out of the CPU reserved for the FCI transport.
+    cpuset: "${MIOS_NONRT_CPUS:-0-5,8-19}"
+    # Fast DDS service calls between host-network containers also need the
+    # shared IPC namespace when its shared-memory transport is selected.
+    ipc: host
+    depends_on:
+      - mios_ros2_control
+    environment:
+      ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-0}
+    command: ["/usr/local/bin/start_model_broadcaster.sh"]
+
+  # The original MIOS Core and Portal, using Ros2CoreRobotBackend only.
+  # It has no libfranka object and cannot own FCI.  All task gates default to
+  # false, so starting this profile is not authorization to move the robot.
+  mios_ros2_core:
+    image: ${MIOS_ROS2_IMAGE:-mios-ros2-jazzy:local}
+    container_name: mios-ros2-core
+    network_mode: host
+    # Portal, database, and learning-task scheduling are intentionally
+    # non-real-time.  They must not contend with the FCI CPU.
+    cpuset: "${MIOS_NONRT_CPUS:-0-5,8-19}"
+    # Match the controller manager's IPC namespace so Fast DDS can deliver
+    # state/model snapshots through shared memory.
+    ipc: host
+    depends_on:
+      mios_ros2_model:
+        condition: service_completed_successfully
+    profiles: ["core"]
+    environment:
+      ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-0}
+    command:
+      - bash
+      - -lc
+      - >-
+        exec /opt/mios/install/bin/mios_ros2_core_runtime --ros-args
+        -p robot_ip:=${ROBOT_IP:-192.168.4.100}
+        -p database_name:=${MONGO_DB_NAME:-mios}
+        -p database_port:=${MONGO_PORT:-27017}
+        -p robot_configuration:=${ROBOT_CONFIG:-0}
+        -p websocket_port:=${MIOS_WS_PORT:-12000}
+        -p rpc_port:=${MIOS_RPC_PORT:-12001}
+        -p udp_port:=${MIOS_UDP_PORT:-12002}
+        -p enable_core_scheduler:=${MIOS_ENABLE_CORE_SCHEDULER:-false}
+        -p enable_core_task_execution:=${MIOS_ENABLE_CORE_TASK_EXECUTION:-false}
+        -p allow_controller_owned_move_mode:=${MIOS_ALLOW_CONTROLLER_OWNED_MOVE_MODE:-false}
+        # Parameter services use a separate libfranka control path and are
+        # rejected while the FCI arm controller is in Move mode.  Keep this
+        # off for every Core task; provision load/TCP/impedance separately
+        # while the robot is Idle.
+        -p allow_robot_parameter_application:=false

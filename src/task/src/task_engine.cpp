@@ -48,22 +48,28 @@ void TaskEngine::life_cycle(){
                     continue;
                 }
             }
-            franka::RobotMode mode;
+            control::RobotMode mode;
             if(m_core->refresh_percept({})){
                 mode=m_core->get_percept()->robot_mode;
             }else{
-                mode=franka::RobotMode::kOther;
+                mode=control::RobotMode::kOther;
             }
-            if(mode==franka::RobotMode::kMove){
+            // A ROS controller changes Franka to MOVE as soon as it claims a
+            // command interface, even when its fail-safe command is zero. The
+            // legacy FCI backend never had that state before a task started,
+            // so retain its IDLE-only behavior unless the ROS-only runtime
+            // explicitly commissions this ownership hand-off.
+            if(mode==control::RobotMode::kMove &&
+               !m_core->m_context.config.allow_controller_owned_move_mode){
                 spdlog::critical("Robot is moving but it is not expected that it moves in the current state.");
                 std::this_thread::sleep_for(std::chrono::seconds(1));
                 continue;
             }
             // Handle reflex
-            if(reflex && mode!=franka::RobotMode::kReflex){
+            if(reflex && mode!=control::RobotMode::kReflex){
                 reflex=false;
             }
-            if(!reflex && mode==franka::RobotMode::kReflex){
+            if(!reflex && mode==control::RobotMode::kReflex){
                 spdlog::warn("Robot has executed a reflex, attempting to recover...");
                 if(!m_core->recover_body()){
                     spdlog::error("Automatic recovery failed, please toggle the user stop...");
@@ -74,15 +80,15 @@ void TaskEngine::life_cycle(){
                 reflex=true;
                 continue;
             }
-            if(reflex && mode==franka::RobotMode::kReflex){
+            if(reflex && mode==control::RobotMode::kReflex){
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
                 continue;
             }
             // Handle other mode
-            if(invalid_mode && mode!=franka::RobotMode::kOther){
+            if(invalid_mode && mode!=control::RobotMode::kOther){
                 invalid_mode=false;
             }
-            if(!invalid_mode && mode==franka::RobotMode::kOther){
+            if(!invalid_mode && mode==control::RobotMode::kOther){
                 spdlog::trace("TaskEngine::invalid_mode_recovery");
                 if(!m_core->recover_body()){
                     spdlog::error("Robot is in invalid mode. Check if the brakes are locked or please toggle the user stop...");
@@ -93,15 +99,15 @@ void TaskEngine::life_cycle(){
                 invalid_mode=true;
                 continue;
             }
-            if(invalid_mode && mode==franka::RobotMode::kOther){
+            if(invalid_mode && mode==control::RobotMode::kOther){
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
                 continue;
             }
             // Handle automatic error recovery
-            if(recovery && mode!=franka::RobotMode::kAutomaticErrorRecovery){
+            if(recovery && mode!=control::RobotMode::kAutomaticErrorRecovery){
                 recovery=false;
             }
-            if(!recovery && mode==franka::RobotMode::kAutomaticErrorRecovery){
+            if(!recovery && mode==control::RobotMode::kAutomaticErrorRecovery){
                 spdlog::trace("TaskEngine::life_cycle.recovery_mode");
                 m_mtx_task_queue.lock();
                 m_task_queue.clear();
@@ -109,15 +115,15 @@ void TaskEngine::life_cycle(){
                 recovery=true;
                 continue;
             }
-            if(recovery && mode==franka::RobotMode::kAutomaticErrorRecovery){
+            if(recovery && mode==control::RobotMode::kAutomaticErrorRecovery){
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
                 continue;
             }
             // Handle guiding mode
-            if(guiding && mode!=franka::RobotMode::kGuiding){
+            if(guiding && mode!=control::RobotMode::kGuiding){
                 guiding=false;
             }
-            if(!guiding && mode==franka::RobotMode::kGuiding){
+            if(!guiding && mode==control::RobotMode::kGuiding){
                 spdlog::warn("Robot is in guiding mode, waiting for stop...");
                 m_mtx_task_queue.lock();
                 m_task_queue.clear();
@@ -125,15 +131,15 @@ void TaskEngine::life_cycle(){
                 guiding=true;
                 continue;
             }
-            if(guiding && mode==franka::RobotMode::kGuiding){
+            if(guiding && mode==control::RobotMode::kGuiding){
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
                 continue;
             }
             // Handle user stop
-            if(user_stop && mode!=franka::RobotMode::kUserStopped){
+            if(user_stop && mode!=control::RobotMode::kUserStopped){
                 user_stop=false;
             }
-            if(!user_stop && mode==franka::RobotMode::kUserStopped){
+            if(!user_stop && mode==control::RobotMode::kUserStopped){
                 spdlog::warn("User stop has been pressed, waiting for release...");
                 m_mtx_task_queue.lock();
                 m_task_queue.clear();
@@ -141,7 +147,7 @@ void TaskEngine::life_cycle(){
                 user_stop=true;
                 continue;
             }
-            if(user_stop && mode==franka::RobotMode::kUserStopped){
+            if(user_stop && mode==control::RobotMode::kUserStopped){
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
                 continue;
             }

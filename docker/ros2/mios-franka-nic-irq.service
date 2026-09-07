@@ -1,0 +1,14 @@
+[Unit]
+Description=Pin Franka Ethernet IRQs for the ROS 2 FCI controller
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+Environment=ROBOT_IP=192.168.4.100
+Environment=MIOS_CONTROL_CPU=6
+ExecStart=/usr/local/sbin/mios-pin-franka-nic-irq
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

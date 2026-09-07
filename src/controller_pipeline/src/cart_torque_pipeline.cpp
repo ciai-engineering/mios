@@ -4,7 +4,8 @@
 
 namespace mios {
 
-CartTorqueControllerPipeline::CartTorqueControllerPipeline():m_panda_cmd({0,0,0,0,0,0,0}),m_nullspace_control_on(false){
+CartTorqueControllerPipeline::CartTorqueControllerPipeline():m_nullspace_control_on(false){
+    m_command.mode = control::CommandMode::kTorque;
     spdlog::trace("CartTorqueControllerPipeline::CartTorqueControllerPipeline()");
 }
 
@@ -12,18 +13,18 @@ CartTorqueControllerPipeline::~CartTorqueControllerPipeline(){
     spdlog::trace("CartTorqueControllerPipeline::~CartTorqueControllerPipeline()");
 }
 
-void CartTorqueControllerPipeline::initialize(const Percept &p_0, Memory *memory){
+void CartTorqueControllerPipeline::initialize(const Percept &p_0, const control::ControlRuntimeConfig& config){
     spdlog::trace("CartTorqueControllerPipeline::initialize()");
-    initialize_cntr_aic(p_0,memory);
-    initialize_cntr_force(p_0,memory);
-    initialize_cntr_mux(p_0,memory);
-    initialize_cntr_nullsp(p_0,memory);
+    initialize_cntr_aic(p_0,config);
+    initialize_cntr_force(p_0,config);
+    initialize_cntr_mux(p_0,config);
+    initialize_cntr_nullsp(p_0,config);
 
     m_T_T_EE_0=p_0.proprioception.T_T_EE;
     m_O_T_EE_d=p_0.proprioception.O_T_EE;
 }
 
-franka::Finishable *CartTorqueControllerPipeline::step(const Percept &p, const Actuator &cmd){
+control::ArmCommand CartTorqueControllerPipeline::step(const Percept &p, const Actuator &cmd){
 
     input_cntr_aic(p);
     input_cntr_force(p);
@@ -70,14 +71,20 @@ franka::Finishable *CartTorqueControllerPipeline::step(const Percept &p, const A
 
     m_cntr_mux.u.tau_J_d=tau_J_d_total;
     m_cntr_mux.step();
-    m_panda_cmd.tau_J={m_cntr_mux.y.tau_J_d_checked(0),m_cntr_mux.y.tau_J_d_checked(1),m_cntr_mux.y.tau_J_d_checked(2),m_cntr_mux.y.tau_J_d_checked(3),m_cntr_mux.y.tau_J_d_checked(4),m_cntr_mux.y.tau_J_d_checked(5),m_cntr_mux.y.tau_J_d_checked(6)};
+    m_command.joints = {m_cntr_mux.y.tau_J_d_checked(0), m_cntr_mux.y.tau_J_d_checked(1),
+                        m_cntr_mux.y.tau_J_d_checked(2), m_cntr_mux.y.tau_J_d_checked(3),
+                        m_cntr_mux.y.tau_J_d_checked(4), m_cntr_mux.y.tau_J_d_checked(5),
+                        m_cntr_mux.y.tau_J_d_checked(6)};
 
-    return &m_panda_cmd;
+    return m_command;
 }
 
-bool CartTorqueControllerPipeline::is_valid_command(const franka::Finishable* const cmd) const{
+bool CartTorqueControllerPipeline::is_valid_command(const control::ArmCommand& cmd) const{
+    if (cmd.mode != control::CommandMode::kTorque) {
+        return false;
+    }
     for(unsigned i=0;i<7;i++){
-        if(static_cast<const franka::Torques*>(cmd)->tau_J[i]!=static_cast<const franka::Torques*>(cmd)->tau_J[i]){
+        if(cmd.joints[i] != cmd.joints[i]){
             return false;
         }
     }
@@ -112,11 +119,11 @@ void CartTorqueControllerPipeline::context_switch(const Percept &p){
     m_T_T_EE_0=p.proprioception.T_T_EE;
 }
 
-void CartTorqueControllerPipeline::initialize_cntr_aic(const Percept &p,Memory* memory){
+void CartTorqueControllerPipeline::initialize_cntr_aic(const Percept &p,const control::ControlRuntimeConfig& config){
     spdlog::trace("CartTorqueControllerPipeline::initialize_cntr_aic()");
-    const ControlParameters& p_cntr=memory->read_parameters()->control;
-    const FramesParameters& p_frames=memory->read_parameters()->frames;
-    const LimitParameters& p_limits=memory->read_parameters()->limits;
+    const ControlParameters& p_cntr=config.control;
+    const FramesParameters& p_frames=config.frames;
+    const LimitParameters& p_limits=config.limits;
     m_cntr_aic.p.alpha=p_cntr.cart_imp_adaptation_stage.alpha;
     m_cntr_aic.p.beta=p_cntr.cart_imp_adaptation_stage.beta;
     m_cntr_aic.p.gamma_a=p_cntr.cart_imp_adaptation_stage.gamma_a;
@@ -162,10 +169,10 @@ void CartTorqueControllerPipeline::input_cntr_aic(const Percept &p){
     m_conv_vel2pose.u.reset<<0;
 }
 
-void CartTorqueControllerPipeline::initialize_cntr_force(const Percept &p, Memory *memory){
+void CartTorqueControllerPipeline::initialize_cntr_force(const Percept &p, const control::ControlRuntimeConfig& config){
     spdlog::trace("CartTorqueControllerPipeline::initialize_cntr_force()");
-    const ControlParameters& p_cntr=memory->read_parameters()->control;
-    const LimitParameters& p_limits=memory->read_parameters()->limits;
+    const ControlParameters& p_cntr=config.control;
+    const LimitParameters& p_limits=config.limits;
     m_cntr_force.p.active=p_cntr.force_control.active;
     m_cntr_force.p.dF_d_max<<p_limits.cartesian_space.dF_J_max(0),p_limits.cartesian_space.dF_J_max(0),p_limits.cartesian_space.dF_J_max(0),p_limits.cartesian_space.dF_J_max(1),p_limits.cartesian_space.dF_J_max(1),p_limits.cartesian_space.dF_J_max(1);
     m_cntr_force.p.F_d_max<<p_limits.cartesian_space.F_J_max(0),p_limits.cartesian_space.F_J_max(0),p_limits.cartesian_space.F_J_max(0),p_limits.cartesian_space.F_J_max(1),p_limits.cartesian_space.F_J_max(1),p_limits.cartesian_space.F_J_max(1);
@@ -192,9 +199,9 @@ void CartTorqueControllerPipeline::input_cntr_force(const Percept &p){
     m_cntr_force.u.O_R_T=p.controller.O_R_T;
 }
 
-void CartTorqueControllerPipeline::initialize_cntr_mux(const Percept &p,Memory* memory){
+void CartTorqueControllerPipeline::initialize_cntr_mux(const Percept &p,const control::ControlRuntimeConfig& config){
     spdlog::trace("CartTorqueControllerPipeline::initialize_cntr_mux()");
-    const LimitParameters& p_limits=memory->read_parameters()->limits;
+    const LimitParameters& p_limits=config.limits;
 
     m_cntr_mux.p.dtau_max=p_limits.joint_space.dtau_J_max;
     m_cntr_mux.p.tau_max=p_limits.joint_space.tau_J_max;
@@ -209,9 +216,9 @@ void CartTorqueControllerPipeline::input_cntr_mux(const Percept &p){
     m_cntr_mux.u.tau_J_d<<0,0,0,0,0,0,0;
 }
 
-void CartTorqueControllerPipeline::initialize_cntr_nullsp(const Percept& p,Memory* memory){
+void CartTorqueControllerPipeline::initialize_cntr_nullsp(const Percept& p,const control::ControlRuntimeConfig& config){
     spdlog::trace("CartTorqueControllerPipeline::initialize_cntr_nullsp()");
-    const ControlParameters& p_cntr=memory->read_parameters()->control;
+    const ControlParameters& p_cntr=config.control;
 
     m_cntr_nullsp_q.u.theta_d=p.proprioception.q;
 
@@ -229,7 +236,7 @@ void CartTorqueControllerPipeline::initialize_cntr_nullsp(const Percept& p,Memor
     m_cntr_nullsp_q.initialize();
     m_cntr_nullsp_proj.initialize();
 
-    m_nullspace_control_on = memory->read_parameters()->control.nullspace_control.active;
+    m_nullspace_control_on = config.control.nullspace_control.active;
 }
 
 void CartTorqueControllerPipeline::input_cntr_nullsp(const Percept &p){

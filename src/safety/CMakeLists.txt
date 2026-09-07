@@ -45,10 +45,8 @@ target_link_libraries(${MODULE_NAME}
     PUBLIC
     virtual_cube::virtual_cube
     virtual_walls_joint::virtual_walls_joint
-    ${PROJECT_NAME}::memory
     ${PROJECT_NAME}::utils
     Eigen3::Eigen
     )
 
 apply_module_options(${MODULE_NAME})
-

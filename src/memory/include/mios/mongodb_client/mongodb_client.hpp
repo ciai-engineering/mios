@@ -17,7 +17,12 @@ namespace mios {
 
 class MongodbClient{
 public:
-    MongodbClient(const std::string& database, unsigned port=27017);
+    MongodbClient(const std::string& database, unsigned port=27017,
+                  bool connect_immediately=true);
+
+    // The legacy application connects in the constructor. ROS-only Core
+    // startup may defer the same blocking connection until Core::initialize.
+    bool connect();
 
     bool read_document(const std::string& name, const std::string& collection, nlohmann::json& descr);
     bool read_documents(const std::string& collection,std::set<nlohmann::json>& docs);
@@ -32,6 +37,10 @@ private:
     mongocxx::client m_client;
     mongocxx::database m_mongodb;
     std::map<std::string,mongocxx::collection> m_collections;
+
+    std::string m_database_name;
+    unsigned m_database_port;
+    bool m_connected{false};
 
     std::mutex m_mutex_db_access;
 };

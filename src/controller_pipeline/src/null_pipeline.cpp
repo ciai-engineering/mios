@@ -3,19 +3,21 @@
 
 namespace mios {
 
-NullControllerPipeline::NullControllerPipeline():m_panda_cmd({0,0,0,0,0,0,0}){
+NullControllerPipeline::NullControllerPipeline(){
+    m_command.mode = control::CommandMode::kTorque;
     spdlog::trace("NullControllerPipeline::NullControllerPipeline");
 }
 
-void NullControllerPipeline::initialize([[maybe_unused]] const Percept &p_0, [[maybe_unused]] Memory *memory){
+void NullControllerPipeline::initialize([[maybe_unused]] const Percept &p_0, [[maybe_unused]] const control::ControlRuntimeConfig& config){
     spdlog::trace("NullControllerPipeline::initialize");
 }
 
-franka::Finishable* NullControllerPipeline::step([[maybe_unused]] const Percept &p, [[maybe_unused]] const Actuator &cmd){
-    return &m_panda_cmd;
+control::ArmCommand NullControllerPipeline::step([[maybe_unused]] const Percept &p,
+                                                  [[maybe_unused]] const Actuator &cmd){
+    return m_command;
 }
 
-bool NullControllerPipeline::is_valid_command([[maybe_unused]] const franka::Finishable *const cmd) const{
+bool NullControllerPipeline::is_valid_command([[maybe_unused]] const control::ArmCommand& cmd) const{
     return false;
 }
 
@@ -27,7 +29,7 @@ void NullControllerPipeline::terminate(){
     spdlog::trace("NullControllerPipeline::terminate");
 }
 
-void NullControllerPipeline::context_switch(const Percept &p){
+void NullControllerPipeline::context_switch([[maybe_unused]] const Percept &p){
     spdlog::trace("NullControllerPipeline::context_switch");
 }
 

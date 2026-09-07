@@ -1,0 +1,387 @@
+controller_manager:
+  ros__parameters:
+    update_rate: 1000
+    # Keep this known commissioning placement while real-time behavior is
+    # isolated one variable at a time. The FR3 Ethernet IRQ currently executes
+    # on performance CPU 6 at FIFO priority 50; the controller loop runs at
+    # the higher priority configured below.
+    cpu_affinity: 6
+    # The ActiveControl API used by franka_hardware relies on this controller
+    # manager thread for every 1 kHz read/write cycle. Keep the established
+    # commissioning priority; the 99-priority experiment did not resolve the
+    # transport reflex and is intentionally not retained as a deployment
+    # setting.
+    thread_priority: 80
+    # The hardware-control process is launched with an unlimited memlock
+    # rlimit. Lock its pages so a page fault cannot interrupt an FCI cycle.
+    lock_memory: true
+    # franka_bringup normally supplies these two controller definitions from
+    # its own controllers.yaml.  The MIOS launch uses this file directly so
+    # that the controller manager receives the MIOS controller definitions at
+    # startup as well.  Keep the broadcaster names/types here to retain the
+    # standard Franka state surface without relying on a post-start parameter
+    # load.
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+    franka_robot_state_broadcaster:
+      type: franka_robot_state_broadcaster/FrankaRobotStateBroadcaster
+    mios_effort_controller:
+      type: mios_ros2_control/MiosEffortController
+    mios_effort_hold_controller:
+      type: mios_ros2_control/MiosEffortController
+    mios_zero_effort_diagnostic_controller:
+      type: mios_ros2_control/MiosZeroEffortDiagnosticController
+    mios_robot_model_broadcaster:
+      type: mios_ros2_control/MiosRobotModelBroadcaster
+    mios_joint_velocity_controller:
+      type: mios_ros2_control/MiosJointVelocityController
+    mios_cartesian_velocity_controller:
+      type: mios_ros2_control/MiosCartesianVelocityController
+    mios_joint_position_controller:
+      type: mios_ros2_control/MiosJointPositionController
+    mios_automatic_joint_position_controller:
+      type: mios_ros2_control/MiosJointPositionController
+    mios_cartesian_pose_controller:
+      type: mios_ros2_control/MiosCartesianPoseController
+
+mios_robot_model_broadcaster:
+  ros__parameters:
+    # This controller claims only read-only semantic state interfaces and
+    # publishes the model to the non-real-time MIOS runtime. It cannot move
+    # the robot and must be explicitly loaded/activated by controller manager.
+    robot_type: fr3
+    arm_prefix: ""
+
+mios_effort_controller:
+  ros__parameters:
+    arm_id: fr3
+    joints:
+      - fr3_joint1
+      - fr3_joint2
+      - fr3_joint3
+      - fr3_joint4
+      - fr3_joint5
+      - fr3_joint6
+      - fr3_joint7
+    # Commissioning limits, not FR3 physical limits. Increase only after the
+    # MIOS pipelines have been ported and validated on the actual robot.
+    effort_limits: [2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0]
+    effort_rate_limit: 10.0
+    command_timeout: 0.1
+    # Read robot mode and the external wrench from the ROS-control hardware's
+    # in-process Franka state box. This avoids receiving/deserializing the
+    # complete 1 kHz robot-state ROS message in the controller-manager process.
+    # "topic" is retained exclusively for GenericSystem lifecycle testing.
+    robot_state_source: hardware
+    # Keep live robot-mode checks enabled for ordinary MIOS effort control. It
+    # may be disabled only for the separately gated exact-zero baseline, which
+    # rejects all non-zero command and hold paths.
+    robot_state_safety_enabled: true
+    # Refuse torque mode unless the live robot state says every joint is
+    # essentially stopped. This avoids switching to an external torque mode
+    # while residual motion could exceed Desk's speed limits.
+    activation_velocity_threshold: 0.01
+    # Hard commissioning lock. The effort interface is capable of moving the
+    # robot even with no external MIOS command, so a physical activation is
+    # rejected until the requested torque mode has been commissioned.
+    allow_effort_activation: true
+    # Exact-zero external torque is the first hardware commissioning mode. On
+    # a real Franka FCI the master controller provides gravity compensation;
+    # it is intentionally a separate live interlock and is not a rigid hold.
+    allow_zero_effort_activation: true
+    # HandGuiding does not use the non-zero command paths, but the supervised
+    # ROS Core learning task is explicitly commissioned to use them.
+    allow_external_effort_commands: false
+    allow_runtime_effort_commands: true
+    # A typed MIOS actuator snapshot is evaluated at 1 kHz against live joint
+    # state. It remains locked until fake-hardware and no-motion commissioning
+    # are complete.
+    allow_runtime_actuator_commands: true
+    # Cartesian actuator snapshots additionally claim Franka's ROS-owned model
+    # state interfaces. Keep this independent gate locked until Cartesian
+    # semantic-interface and no-motion commissioning are complete.
+    allow_runtime_cartesian_actuator_commands: true
+    # Base-frame external-wrench PI stage for the legacy desired-wrench path.
+    # It uses O_F_ext_hat_K feedback and zero-Jacobian torque mapping, but is
+    # fully locked until contact, frame/sign, and torque commissioning pass.
+    allow_runtime_cartesian_force_commands: false
+    cartesian_force_enabled: false
+    force_proportional_gain: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    force_integral_gain: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    force_integral_wrench_limit: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    force_derivative_gain: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    force_derivative_filter_time_constant: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    force_derivative_wrench_limit: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    force_output_wrench_limit: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    # Positive values are required for deterministic rate limiting even while
+    # the zero wrench limit keeps this stage inert.
+    force_output_wrench_rate_limit: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+    # Contact-aware Cartesian stiffness adaptation. It is independent from
+    # the desired-wrench PID gate and remains inert unless commissioned.
+    cartesian_impedance_adaptation_enabled: false
+    adaptation_contact_stiffness_gain: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    adaptation_stiffness_lower_limit: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    adaptation_stiffness_upper_limit: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+    adaptation_stiffness_rate_limit: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+    # Damped kinematic null-space projection of joint impedance torque.
+    # These locks and zero effort limits make it inert in the shipped image.
+    allow_runtime_nullspace_commands: false
+    nullspace_enabled: false
+    nullspace_singularity_damping: 0.1
+    nullspace_effort_limit: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    # The local spring/damper hold is disabled until it is individually
+    # commissioned. The initial hardware test must write exactly zero external
+    # torque and compare its behavior with Franka's official gravity-
+    # compensation controller; it is not a rigid position hold.
+    position_hold_enabled: false
+    hold_stiffness: [8.0, 8.0, 8.0, 8.0, 3.0, 3.0, 3.0]
+    hold_damping: [1.0, 1.0, 1.0, 1.0, 0.3, 0.3, 0.3]
+    hold_max_torque: [1.0, 1.0, 1.0, 1.0, 0.5, 0.5, 0.5]
+    # MIOS virtual joint-wall safety. Kept at zero torque until commissioned
+    # against the FR3's actual joint limits and site safety assessment.
+    joint_safety_enabled: true
+    joint_lower_limits: [-2.7437, -1.7837, -2.9007, -3.0421, -2.8065, 0.5445, -3.0159]
+    joint_upper_limits: [2.7437, 1.7837, 2.9007, -0.1518, 2.8065, 4.5169, 3.0159]
+    joint_wall_stiffness: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    joint_wall_damping: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    joint_wall_max_torque: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    # Ported MIOS Cartesian damping and virtual-workspace terms. Both are
+    # disabled and produce zero safety torque until specifically commissioned.
+    cartesian_velocity_damping_enabled: false
+    cartesian_velocity_threshold: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    cartesian_velocity_damping: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    cartesian_damping_max_torque: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    cartesian_workspace_enabled: false
+    cartesian_workspace_lower_limits: [-1.0, -1.0, -1.0]
+    cartesian_workspace_upper_limits: [1.0, 1.0, 1.0]
+    cartesian_workspace_stiffness: [0.0, 0.0, 0.0]
+    cartesian_workspace_damping: [0.0, 0.0, 0.0]
+    cartesian_workspace_max_force: [0.0, 0.0, 0.0]
+
+# A minimal transport-free controller used solely to diagnose real-time FCI
+# behavior. It claims only effort interfaces and writes exactly zero external
+# torque. It is gated off by default and is not used by MIOS tasks.
+mios_zero_effort_diagnostic_controller:
+  ros__parameters:
+    joints:
+      - fr3_joint1
+      - fr3_joint2
+      - fr3_joint3
+      - fr3_joint4
+      - fr3_joint5
+      - fr3_joint6
+      - fr3_joint7
+    activation_velocity_threshold: 0.01
+    allow_zero_effort_activation: false
+
+# Opt-in post-HandGuiding hold. This is a second instance of the effort
+# controller, not a native joint-position controller: switching to it retains
+# the same Franka effort interfaces, captures the measured pose at activation,
+# and applies only the bounded local spring/damper below. It stays locked until
+# a supervised, non-zero-torque commissioning test explicitly enables
+# allow_effort_activation on this controller.
+mios_effort_hold_controller:
+  ros__parameters:
+    arm_id: fr3
+    joints:
+      - fr3_joint1
+      - fr3_joint2
+      - fr3_joint3
+      - fr3_joint4
+      - fr3_joint5
+      - fr3_joint6
+      - fr3_joint7
+    effort_limits: [2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0]
+    effort_rate_limit: 10.0
+    command_timeout: 0.1
+    robot_state_source: hardware
+    activation_velocity_threshold: 0.01
+    allow_effort_activation: false
+    # This controller is deliberately not the zero-effort baseline. It has a
+    # local hold enabled and can only be used after the explicit effort gate.
+    allow_zero_effort_activation: false
+    allow_external_effort_commands: false
+    allow_runtime_effort_commands: false
+    allow_runtime_actuator_commands: false
+    allow_runtime_cartesian_actuator_commands: false
+    allow_runtime_cartesian_force_commands: false
+    allow_runtime_nullspace_commands: false
+    position_hold_enabled: true
+    # Publish a bounded-rate telemetry frame during a supervised hold test.
+    # The 35 values are commanded effort, measured effort, position, velocity,
+    # and captured hold reference: seven entries in each group.
+    effort_diagnostic_publish_rate: 20.0
+    # First rigid-hold commissioning tune, not robot torque limits. Gravity
+    # compensation remains inside Franka; these cap only the added local hold
+    # torque. It is intentionally stronger than the prior compliant spring,
+    # but remains bounded for supervised validation before any further change.
+    # Supervised FR3 commissioning tune, not robot torque limits. Gravity
+    # compensation remains inside Franka; these cap only the added local hold
+    # torque. Joint 4 has the higher bound because the witnessed post-task
+    # test displaced it most under the lower 1 Nm all-large-joint tuning.
+    hold_stiffness: [6.0, 6.0, 6.0, 12.0, 2.0, 2.0, 2.0]
+    hold_damping: [1.5, 1.5, 1.5, 2.0, 0.5, 0.5, 0.5]
+    hold_max_torque: [1.0, 1.0, 1.0, 2.0, 0.5, 0.5, 0.5]
+    joint_safety_enabled: true
+    joint_lower_limits: [-2.7437, -1.7837, -2.9007, -3.0421, -2.8065, 0.5445, -3.0159]
+    joint_upper_limits: [2.7437, 1.7837, 2.9007, -0.1518, 2.8065, 4.5169, 3.0159]
+    joint_wall_stiffness: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    joint_wall_damping: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    joint_wall_max_torque: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+mios_joint_velocity_controller:
+  ros__parameters:
+    joints:
+      - fr3_joint1
+      - fr3_joint2
+      - fr3_joint3
+      - fr3_joint4
+      - fr3_joint5
+      - fr3_joint6
+      - fr3_joint7
+    # Commissioning-only values, deliberately far below FR3 limits.
+    velocity_limits: [0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05]
+    acceleration_limits: [0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10]
+    # Independent software margin inside the physical FR3 range. A velocity
+    # command farther into a margin is rejected, while a command back toward
+    # the safe range remains available for recovery.
+    joint_lower_limits: [-2.7437, -1.7837, -2.9007, -3.0421, -2.8065, 0.5445, -3.0159]
+    joint_upper_limits: [2.7437, 1.7837, 2.9007, -0.1518, 2.8065, 4.5169, 3.0159]
+    joint_limit_margins: [0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10]
+    command_timeout: 0.1
+    robot_state_topic: /franka_robot_state_broadcaster/robot_state
+    robot_state_timeout: 0.1
+    activation_velocity_threshold: 0.01
+    # This mode must be activated through controller-manager switching, never
+    # alongside an effort controller. Keep both gates locked by default.
+    allow_velocity_activation: false
+    allow_runtime_joint_velocity_commands: false
+
+mios_cartesian_velocity_controller:
+  ros__parameters:
+    joints:
+      - fr3_joint1
+      - fr3_joint2
+      - fr3_joint3
+      - fr3_joint4
+      - fr3_joint5
+      - fr3_joint6
+      - fr3_joint7
+    # Interface names provided by franka_hardware for Cartesian velocity mode.
+    cartesian_velocity_interfaces:
+      - vx/cartesian_velocity
+      - vy/cartesian_velocity
+      - vz/cartesian_velocity
+      - wx/cartesian_velocity
+      - wy/cartesian_velocity
+      - wz/cartesian_velocity
+    # Commissioning-only caps in [m/s, m/s, m/s, rad/s, rad/s, rad/s] and
+    # [m/s^2, m/s^2, m/s^2, rad/s^2, rad/s^2, rad/s^2].
+    velocity_limits: [0.01, 0.01, 0.01, 0.10, 0.10, 0.10]
+    acceleration_limits: [0.05, 0.05, 0.05, 0.20, 0.20, 0.20]
+    command_timeout: 0.1
+    robot_state_topic: /franka_robot_state_broadcaster/robot_state
+    robot_state_timeout: 0.1
+    activation_velocity_threshold: 0.01
+    # This mode must be controller-manager switched, never active alongside
+    # effort or joint-velocity controllers. Keep both gates locked by default.
+    allow_cartesian_velocity_activation: false
+    allow_runtime_cartesian_velocity_commands: false
+
+mios_joint_position_controller:
+  ros__parameters:
+    joints:
+      - fr3_joint1
+      - fr3_joint2
+      - fr3_joint3
+      - fr3_joint4
+      - fr3_joint5
+      - fr3_joint6
+      - fr3_joint7
+    # Bounds are the FR3 ranges. The rate below is a commissioning-only cap,
+    # deliberately far lower than the robot's physical velocity limits.
+    joint_lower_limits: [-2.7437, -1.7837, -2.9007, -3.0421, -2.8065, 0.5445, -3.0159]
+    joint_upper_limits: [2.7437, 1.7837, 2.9007, -0.1518, 2.8065, 4.5169, 3.0159]
+    position_velocity_limits: [0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05]
+    # Ramp velocity at a bounded acceleration too. A 1 kHz 0 -> velocity step
+    # can otherwise trigger Franka's motion-generator acceleration reflex.
+    position_acceleration_limits: [0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05]
+    command_timeout: 0.1
+    robot_state_topic: /franka_robot_state_broadcaster/robot_state
+    robot_state_timeout: 0.1
+    activation_velocity_threshold: 0.01
+    # The preceding Franka trajectory must be settled before entering native
+    # position mode. This prevents a q/q_d handoff from becoming a discontinuous
+    # first motion-generator command.
+    activation_position_tolerance: 0.001
+    activation_acceleration_threshold: 0.1
+    # The controller captures the current position at activation and sends it
+    # again for stale/stop input. Both gates must be commissioned explicitly.
+    allow_position_activation: true
+    allow_runtime_joint_position_commands: false
+
+# Dedicated opt-in profile for scripted setup/approach motions.  It is never
+# loaded by the standard bridge launch; an automatic job must explicitly load
+# this named controller.  Keeping it separate makes the ordinary no-target
+# hold controller incapable of accepting a trajectory by configuration.
+mios_automatic_joint_position_controller:
+  ros__parameters:
+    # Read the safety state directly from franka_hardware.  This avoids a
+    # second full 1 kHz RobotState deserialization in controller_manager.
+    arm_id: fr3
+    robot_state_source: hardware
+    joints: [fr3_joint1, fr3_joint2, fr3_joint3, fr3_joint4, fr3_joint5, fr3_joint6, fr3_joint7]
+    joint_lower_limits: [-2.7437, -1.7837, -2.9007, -3.0421, -2.8065, 0.5445, -3.0159]
+    joint_upper_limits: [2.7437, 1.7837, 2.9007, -0.1518, 2.8065, 4.5169, 3.0159]
+    position_velocity_limits: [0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05]
+    position_acceleration_limits: [0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05]
+    command_timeout: 0.1
+    robot_state_topic: /franka_robot_state_broadcaster/robot_state
+    robot_state_timeout: 0.1
+    activation_velocity_threshold: 0.01
+    activation_position_tolerance: 0.001
+    activation_acceleration_threshold: 0.1
+    allow_position_activation: true
+    allow_runtime_joint_position_commands: true
+
+mios_cartesian_pose_controller:
+  ros__parameters:
+    joints:
+      - fr3_joint1
+      - fr3_joint2
+      - fr3_joint3
+      - fr3_joint4
+      - fr3_joint5
+      - fr3_joint6
+      - fr3_joint7
+    # The native Franka Cartesian-pose command is a column-major 4x4 matrix.
+    cartesian_pose_interfaces:
+      - 0/cartesian_pose_command
+      - 1/cartesian_pose_command
+      - 2/cartesian_pose_command
+      - 3/cartesian_pose_command
+      - 4/cartesian_pose_command
+      - 5/cartesian_pose_command
+      - 6/cartesian_pose_command
+      - 7/cartesian_pose_command
+      - 8/cartesian_pose_command
+      - 9/cartesian_pose_command
+      - 10/cartesian_pose_command
+      - 11/cartesian_pose_command
+      - 12/cartesian_pose_command
+      - 13/cartesian_pose_command
+      - 14/cartesian_pose_command
+      - 15/cartesian_pose_command
+    # Commissioning workspace and rate limits, not an FR3 site safety model.
+    workspace_lower_limits: [-1.0, -1.0, -1.0]
+    workspace_upper_limits: [1.0, 1.0, 1.0]
+    linear_velocity_limit: 0.01
+    angular_velocity_limit: 0.10
+    command_timeout: 0.1
+    robot_state_topic: /franka_robot_state_broadcaster/robot_state
+    robot_state_timeout: 0.1
+    activation_velocity_threshold: 0.01
+    # Captures the live end-effector pose for activation and stale/stop hold.
+    # Both gates stay locked pending workspace and no-motion commissioning.
+    allow_cartesian_pose_activation: false
+    allow_runtime_cartesian_pose_commands: false

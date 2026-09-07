@@ -7,14 +7,15 @@ CartesianVelocityDampingSafetyModule::CartesianVelocityDampingSafetyModule():m_d
 
 }
 
-void CartesianVelocityDampingSafetyModule::initialize(const Percept &p_0, const Memory *memory){
-    m_damping_on = memory->read_parameters()->safety.cartesian_velocity_damping.active;
-    m_dX_thr = memory->read_parameters()->safety.cartesian_velocity_damping.dX_thr;
-    m_D_x = memory->read_parameters()->safety.cartesian_velocity_damping.D_x;
+void CartesianVelocityDampingSafetyModule::initialize([[maybe_unused]] const Percept &p_0,
+                                                       const control::ControlRuntimeConfig& config){
+    m_damping_on = config.safety.cartesian_velocity_damping.active;
+    m_dX_thr = config.safety.cartesian_velocity_damping.dX_thr;
+    m_D_x = config.safety.cartesian_velocity_damping.D_x;
 }
 
-void CartesianVelocityDampingSafetyModule::step(const Percept &p, franka::Finishable *cmd){
-    if(m_damping_on){
+void CartesianVelocityDampingSafetyModule::step(const Percept &p, control::ArmCommand& cmd){
+    if(m_damping_on && cmd.mode == control::CommandMode::kTorque){
 
         Eigen::Matrix<double,6,1> F_damp;
         F_damp.setZero();
@@ -25,7 +26,7 @@ void CartesianVelocityDampingSafetyModule::step(const Percept &p, franka::Finish
         }
         Eigen::Matrix<double,7,1> tau_damp = p.internal_model.B_J_EE.transpose()*F_damp;
         for(unsigned i=0;i<7;i++){
-            static_cast<franka::Torques*>(cmd)->tau_J[i]+=tau_damp(i);
+            cmd.joints[i] += tau_damp(i);
         }
     }
 }

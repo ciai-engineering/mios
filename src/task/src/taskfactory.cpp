@@ -12,6 +12,7 @@
 #include "mios/tasks/generic_task.hpp"
 #include "mios/tasks/insert_object.hpp"
 #include "mios/tasks/extract_object.hpp"
+#include "mios/tasks/ros2_no_motion_self_test.hpp"
 
 #include "mirmi_cpp_utils/files/files.hpp"
 #include "spdlog/spdlog.h"
@@ -43,6 +44,8 @@ TaskName TaskFactory::get_task_name(const std::string& task){
         return TaskNameInsertObject;
     case mirmi_utils::str_to_int("ExtractObject"):
         return TaskNameExtractObject;
+    case mirmi_utils::str_to_int("Ros2NoMotionSelfTest"):
+        return TaskNameRos2NoMotionSelfTest;
     default:
         spdlog::error("Task with id " + task + " does not exist.");
         return TaskNameNullTask;
@@ -73,6 +76,8 @@ std::shared_ptr<Task> TaskFactory::create_task(TaskName task, Core* core){
         return std::make_shared<InsertObject>(core);
     case TaskNameExtractObject:
         return std::make_shared<ExtractObject>(core);
+    case TaskNameRos2NoMotionSelfTest:
+        return std::make_shared<Ros2NoMotionSelfTest>(core);
     default:
         spdlog::critical("Invalid task name.");
         return std::make_shared<NullTask>(core);

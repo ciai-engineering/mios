@@ -38,7 +38,6 @@ target_link_libraries(${MODULE_NAME}
     ${PROJECT_NAME}::${PROJECT_NAME}_project_deps
     ${PROJECT_NAME}::skills
     ${PROJECT_NAME}::core
-    Franka::Franka
     mirmi_cpp_utils::benchmarking
     mirmi_cpp_utils::conversion
     mirmi_cpp_utils::files
@@ -55,4 +54,3 @@ target_link_libraries(${MODULE_NAME}
     )
 
 apply_module_options(${MODULE_NAME})
-
